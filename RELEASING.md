@@ -4,10 +4,10 @@ Every release on GitHub has a downloadable `PullDay-<version>.dmg` and notes tak
 
 ## Versions
 
-PullDay uses [semantic versioning](https://semver.org): `X.Y.Z`.
+Versions are `X.Y.Z`, loosely following [semantic versioning](https://semver.org):
 
-- **Patch** (`1.0.1`): bug fixes only.
-- **Minor** (`1.1.0`): new agents, sources or features that don't change existing behavior.
+- **Patch** (`1.0.2`): bug fixes, and new agents or sources. A new source only adds items to the menu, users can turn it off in **Settings → Sources**, and nothing they already rely on changes, so it ships as a patch (1.0.2 added Antigravity this way).
+- **Minor** (`1.1.0`): other new features, such as new settings, new windows or behavior, or a new platform.
 - **Major** (`2.0.0`): changes that break what users rely on, such as removing a source or changing a default.
 
 ## While you work
