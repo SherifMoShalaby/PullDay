@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/SherifMoShalaby/PullDay/releases/latest"><img src="https://img.shields.io/github/v/release/SherifMoShalaby/PullDay?style=flat-square&color=111111&label=release" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square" alt="macOS 13 or later">
   <img src="https://img.shields.io/badge/Swift-5-111111?style=flat-square" alt="Swift 5">
   <img src="https://img.shields.io/badge/works%20with-5%20agents-111111?style=flat-square" alt="Works with 5 agents">
@@ -49,7 +50,13 @@ Some tools ship their skill separately from the CLI. graphify is one: upgrading 
 
 ## Install
 
-You need macOS 13 or later and the Xcode Command Line Tools (`xcode-select --install`). The full Xcode app isn't required, and there are no dependencies to fetch.
+**Download:** get `PullDay-<version>.dmg` from the [latest release](https://github.com/SherifMoShalaby/PullDay/releases/latest), open it and drag PullDay to Applications. Builds aren't notarized yet, so macOS blocks the app the first time: try to open it once, then click **Open Anyway** in **System Settings → Privacy & Security**. Or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/PullDay.app
+```
+
+**Or build it yourself.** You need macOS 13 or later and the Xcode Command Line Tools (`xcode-select --install`). The full Xcode app isn't required, and there are no dependencies to fetch.
 
 ```bash
 git clone https://github.com/SherifMoShalaby/PullDay.git
@@ -57,7 +64,7 @@ cd PullDay
 ./build.sh --install
 ```
 
-That compiles a universal app, copies it to `/Applications` and launches it. Look for the barbell in your menu bar. Then:
+That compiles a universal app, copies it to `/Applications` and launches it. Either way, look for the barbell in your menu bar. Then:
 
 - Allow notifications when macOS asks, so you hear about updates.
 - Turn on **Settings → General → Open PullDay at login** so it keeps running.
@@ -67,13 +74,7 @@ That compiles a universal app, copies it to `/Applications` and launches it. Loo
 <details>
 <summary><strong>Sharing a build with another Mac</strong></summary>
 
-`./build.sh --dmg` makes `build/PullDay.dmg`. It's ad-hoc signed by default, so Gatekeeper blocks it the first time on another Mac. To open it anyway, try to open the app once, then click **Open Anyway** in **System Settings → Privacy & Security**. Or, from Terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/PullDay.app
-```
-
-With an Apple Developer ID, `SIGN_IDENTITY="Developer ID Application: …"` signs the build, and `NOTARY_PROFILE=<profile>` (from `xcrun notarytool store-credentials`) also notarizes and staples the DMG, so it opens without warnings.
+`./build.sh --dmg` makes `build/PullDay.dmg`. It's ad-hoc signed by default, so another Mac blocks it the first time, just like the release download above. With an Apple Developer ID, `SIGN_IDENTITY="Developer ID Application: …"` signs the build, and `NOTARY_PROFILE=<profile>` (from `xcrun notarytool store-credentials`) also notarizes and staples the DMG, so it opens without warnings.
 
 </details>
 
@@ -128,7 +129,7 @@ Nothing else was installed. Your skills, plugins and tools stay exactly as they 
 
 ## Contributing
 
-Issues and pull requests are welcome. The app is about 2,000 lines of Swift with no dependencies, built with one `swiftc` call, and `./build.sh --test` runs a self-test that needs no network. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the code is laid out and how to add a new agent or source.
+Issues and pull requests are welcome. The app is about 2,000 lines of Swift with no dependencies, built with one `swiftc` call, and `./build.sh --test` runs a self-test that needs no network. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the code is laid out and how to add a new agent or source, and [RELEASING.md](RELEASING.md) how a release is cut.
 
 Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 

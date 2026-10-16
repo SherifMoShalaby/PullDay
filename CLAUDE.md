@@ -17,7 +17,7 @@ No Xcode project. The app is built with plain `swiftc` from the Command Line Too
 ./build.sh --dmg      # also packages build/PullDay.dmg (SIGN_IDENTITY / NOTARY_PROFILE to sign and notarize)
 ```
 
-Flags: `-swift-version 5 -parse-as-library -target <arch>-apple-macos13.0`. Keep Swift 5 language mode unless you deliberately migrate to strict concurrency.
+Flags: `-swift-version 5 -parse-as-library -target <arch>-apple-macos13.0`. Releases (a DMG and CHANGELOG notes on GitHub Releases, built by `.github/workflows/release.yml` from a `v*` tag) are described in `RELEASING.md`; user-visible changes go under `## Unreleased` in `CHANGELOG.md`. Keep Swift 5 language mode unless you deliberately migrate to strict concurrency.
 
 Quick compile check while iterating (faster than the universal build):
 ```bash

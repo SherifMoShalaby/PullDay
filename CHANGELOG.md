@@ -1,6 +1,12 @@
 # Changelog
 
-## 1.0.0
+What changed in each release. New entries go under **Unreleased**; releasing renames that heading to the version and date. Each GitHub release shows its version's section.
+
+## Unreleased
+
+- A command that leaves a process running in the background (for example a post-update command that starts a server) no longer keeps PullDay waiting, which could leave it stuck on "Updating…".
+
+## 1.0.0 - 2026-10-16
 
 The first public release.
 

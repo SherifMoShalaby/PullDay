@@ -1,0 +1,74 @@
+name: Release
+
+# Pushing a tag vX.Y.Z builds PullDay-X.Y.Z.dmg and publishes the GitHub release, with the notes from
+# CHANGELOG.md's "## X.Y.Z" section on main. Run it by hand to (re)build the release of an existing tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build the release for, e.g. v1.0.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Check the version
+        run: |
+          VERSION="${TAG#v}"
+          PLIST="$(plutil -extract CFBundleShortVersionString raw Info.plist)"
+          if [ "$PLIST" != "$VERSION" ]; then
+            echo "::error::Tag $TAG, but Info.plist says $PLIST"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Release notes
+        run: |
+          git show origin/main:CHANGELOG.md \
+            | awk -v head="## $VERSION" 'index($0, head) == 1 && (length($0) == length(head) || substr($0, length(head) + 1, 1) == " ") { found = 1; next }
+                                         found && /^## / { exit }
+                                         found { print }' > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md on main has no \"## $VERSION\" section"
+            exit 1
+          fi
+
+      - name: Self-test
+        run: ./build.sh --test
+
+      - name: Build the DMG
+        run: |
+          ./build.sh --dmg
+          mv build/PullDay.dmg "PullDay-$VERSION.dmg"
+          SHA="$(shasum -a 256 "PullDay-$VERSION.dmg" | cut -d' ' -f1)"
+          cat >> notes.md <<EOF
+
+          ## Install
+
+          Download **PullDay-$VERSION.dmg**, open it and drag PullDay to Applications. This build isn't notarized yet, so macOS blocks it the first time: try to open it once, then click **Open Anyway** in **System Settings → Privacy & Security**. Or run \`xattr -dr com.apple.quarantine /Applications/PullDay.app\`.
+
+          SHA-256: \`$SHA\`
+          EOF
+
+      - name: Publish
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "PullDay-$VERSION.dmg" --clobber
+            gh release edit "$TAG" --title "PullDay $VERSION" --notes-file notes.md
+          else
+            gh release create "$TAG" "PullDay-$VERSION.dmg" --verify-tag --title "PullDay $VERSION" --notes-file notes.md
+          fi

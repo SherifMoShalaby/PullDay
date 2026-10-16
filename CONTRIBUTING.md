@@ -65,3 +65,4 @@ Add an `Agent` case with its `title` and `homeDir`, and list the skill folders i
 - One change per pull request, with a sentence on why.
 - `./build.sh --test` passes, and `./build.sh` builds without new warnings.
 - If you changed what PullDay finds or runs, say how you checked it against a real install, and update the README.
+- Add a line for users under `## Unreleased` in `CHANGELOG.md` if they'd notice the change. [RELEASING.md](RELEASING.md) covers the rest of a release.
