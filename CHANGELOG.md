@@ -2,7 +2,7 @@
 
 What changed in each release. New entries go under **Unreleased**; releasing renames that heading to the version and date. Each GitHub release shows its version's section.
 
-## Unreleased
+## 1.0.1 - 2026-10-16
 
 - A command that leaves a process running in the background (for example a post-update command that starts a server) no longer keeps PullDay waiting, which could leave it stuck on "Updating…".
 
