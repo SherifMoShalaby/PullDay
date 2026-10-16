@@ -19,7 +19,6 @@ jobs:
     runs-on: macos-15
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,6 +64,8 @@ jobs:
           EOF
 
       - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "PullDay-$VERSION.dmg" --clobber
