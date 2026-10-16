@@ -63,7 +63,8 @@ final class AppState: ObservableObject {
         watchers.forEach { $0.cancel() }   // the cancel handler closes each fd
         watchers.removeAll()
         // Agent folders only while their source is on: Codex upgrades churn through a .staging folder.
-        let optional = [(SourceKind.codexPlugin, Scanner.codexMarketplacesDir), (.geminiExtension, Scanner.geminiExtensionsDir)]
+        let optional = [(SourceKind.codexPlugin, Scanner.codexMarketplacesDir), (.geminiExtension, Scanner.geminiExtensionsDir),
+                        (.antigravityPlugin, Scanner.antigravityPluginsDir)]
             .filter { prefs.enabledKinds.contains($0.0.rawValue) }.map(\.1)
         for path in Scanner.skillRoots + [Scanner.marketplacesDir] + optional {
             let fd = open(path, O_EVTONLY)
@@ -211,7 +212,7 @@ final class AppState: ObservableObject {
         guard notifyWhenDone, prefs.notify else { return }
         if !updated.isEmpty {
             var body = updated.map(\.name).joined(separator: ", ")
-            let restart: [SourceKind: String] = [.plugin: "Claude Code", .codexPlugin: "Codex", .geminiExtension: "Gemini CLI"]
+            let restart: [SourceKind: String] = [.plugin: "Claude Code", .codexPlugin: "Codex", .antigravityPlugin: "Antigravity", .geminiExtension: "Gemini CLI"]
             let agents = Set(updated.compactMap { restart[$0.kind] }).sorted()
             if !agents.isEmpty { body += ". Restart \(agents.joined(separator: " and ")) to load the new versions." }
             Notifier.send(title: "Updated \(updated.count) item\(updated.count == 1 ? "" : "s")", body: body)

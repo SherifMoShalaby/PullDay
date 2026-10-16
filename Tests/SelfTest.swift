@@ -26,6 +26,8 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
         await migration()
         await codexRecords()
         await geminiUpdateGuard()
+        await antigravity()
+        unsetenv("ZDOTDIR")
         await backgroundChildDoesNotHang()
         print(failures == 0 ? "SelfTest: all checks passed" : "SelfTest: \(failures) failed")
         exit(failures == 0 ? 0 : 1)
@@ -168,7 +170,54 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
         check(!noop.ok && noop.summary.contains("consent"), "a no-op update fails with the consent note, got: \(noop.summary)")
         let real = await run(installs: true)
         check(real.ok, "a real update succeeds, got: \(real.summary)")
-        unsetenv("ZDOTDIR")
+    }
+
+    /// `agy plugin list --json` as Antigravity CLI 1.4.0 prints it (captured from a real install), plus the Go
+    /// logger's stderr noise; the plugin update must never hand `agy` a local path or an option.
+    static func antigravity() async {
+        let list = """
+        ERROR: logging before google.Init: I1016 21:58:38.362951       1 cli.go:27] starting
+        [
+          {"name": "ponytail", "enabled": true, "version": "5.3.1", "source": "antigravity",
+           "path": "/home/u/.gemini/config/plugins/ponytail", "skills": ["ponytail", "ponytail-review"]},
+          {"name": "alpha", "enabled": false, "source": "antigravity", "path": "/home/u/.gemini/config/plugins/alpha"}
+        ]
+        """
+        let items = Scanner.antigravityPlugins(fromList: list)
+        check(items.map(\.name) == ["alpha", "ponytail"], "agy plugins are parsed out of the log noise and sorted")
+        check(items.last?.detail == "v5.3.1" && items.last?.path == "/home/u/.gemini/config/plugins/ponytail", "version and path")
+        check(items.first?.detail == "Version unknown · disabled", "a disabled plugin says so")
+        check(items.allSatisfy { $0.agents == [.antigravity] && $0.id.hasPrefix("antigravityPlugin:") }, "agent and id")
+        check(Scanner.antigravityPlugins(fromList: "agy: not logged in").isEmpty, "no JSON, no items")
+
+        for url in ["https://github.com/o/r.git", "git@github.com:o/r.git", "ssh://git@host/o/r"] {
+            check(Scanner.antigravityInstallURL(url + "\n") == url, "\(url) can be reinstalled from")
+        }
+        for url in ["/home/u/src/plugin", "./plugin", "-oProxyCommand=touch /tmp/x", "file:///tmp/r", "https://x y"] {
+            check(Scanner.antigravityInstallURL(url) == nil, "\(url) is never passed to agy")
+        }
+
+        // A fake agy on PATH (the gemini check set up ZDOTDIR to put tmp/gemini/bin first).
+        write("gemini/bin/agy", """
+            #!/bin/sh
+            case "$1" in
+              --version) echo "ERROR: logging before google.Init: I1016 cli.go:27] x" >&2; echo "1.4.0";;
+              plugin) [ "$2" = install ] && touch "\(tmp)/agy-install-ran";;
+            esac
+            exit 0
+            """)
+        chmod(tmp + "/gemini/bin/agy", 0o755)
+        check(await Scanner.agyVersion() == "1.4.0", "agy's version is read past its log line")
+        check(await Scanner.discoverAntigravityCLI().first?.detail == "v1.4.0", "the agy item shows its version")
+
+        // A plugin whose origin is a local path: the update refuses and agy is never run.
+        mkdir("agy/plugins/local/.git")
+        _ = await Shell.run("git -C \(Shell.quote(tmp + "/agy/plugins/local")) init -q && git -C \(Shell.quote(tmp + "/agy/plugins/local")) remote add origin /some/local/path")
+        var local = UpdatableItem(kind: .antigravityPlugin, name: "local", detail: "v1", path: tmp + "/agy/plugins/local")
+        local.status = .updating
+        let refused = await Scanner.update(local, postCommand: nil)
+        check(!refused.ok && !fm.fileExists(atPath: tmp + "/agy-install-ran"), "a local-path origin is never reinstalled, got: \(refused.summary)")
+        check(await Scanner.antigravityPluginStatus(tmp + "/agy/plugins") == .unknown("Not installed from a git repo"), "a non-git plugin can't be checked")
     }
 
     /// A command that leaves a background child holding the output pipe (a post-update command that starts a

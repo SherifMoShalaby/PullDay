@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.svg">
-    <img src="assets/hero-light.svg" width="880" alt="PullDay: never skip pull day. Keeps Claude Code, Codex, Gemini CLI, OpenCode and Cursor add-ons up to date from the menu bar.">
+    <img src="assets/hero-light.svg" width="880" alt="PullDay: never skip pull day. Keeps Claude Code, Codex, Gemini CLI, Antigravity, OpenCode and Cursor add-ons up to date from the menu bar.">
   </picture>
 </p>
 
@@ -9,7 +9,7 @@
   <a href="https://github.com/SherifMoShalaby/PullDay/releases/latest"><img src="https://img.shields.io/github/v/release/SherifMoShalaby/PullDay?style=flat-square&color=111111&label=release" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square" alt="macOS 13 or later">
   <img src="https://img.shields.io/badge/Swift-5-111111?style=flat-square" alt="Swift 5">
-  <img src="https://img.shields.io/badge/works%20with-5%20agents-111111?style=flat-square" alt="Works with 5 agents">
+  <img src="https://img.shields.io/badge/works%20with-6%20agents-111111?style=flat-square" alt="Works with 6 agents">
   <img src="https://img.shields.io/badge/dependencies-0-111111?style=flat-square" alt="No dependencies">
   <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT license">
 </p>
@@ -39,7 +39,9 @@ The menu groups everything by agent. A shared skills folder like `~/.agents/skil
 | Codex | Plugin marketplaces | `~/.codex/.tmp/marketplaces/*` | `codex plugin marketplace upgrade` |
 | Codex | The `codex` command | `command -v codex` | `codex update` |
 | Gemini CLI | Extensions | `~/.gemini/extensions/*` | `gemini extensions update` |
-| All five | Git-cloned skills | Git repos in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/skills`, `~/.config/opencode/skills`, `~/.cursor/skills` (symlinks followed) | `git pull --ff-only` |
+| Antigravity | Plugins installed from a git repo | `agy plugin list` | `agy plugin install <repo>` again, which updates it in place |
+| Antigravity | The `agy` command | `command -v agy` | `agy update` |
+| All | Git-cloned skills | Git repos in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/skills`, `~/.config/opencode/skills`, `~/.cursor/skills` (symlinks followed) | `git pull --ff-only` |
 | Any | uv tools, e.g. graphify | `uv tool list` | `uv tool upgrade` |
 | Any | pipx tools | `pipx list --short` | `pipx upgrade` |
 | Any | npm globals (off by default) | `npm ls -g` | `npm install -g <name>@latest` |
@@ -109,6 +111,7 @@ PullDay runs commands on your machine, so here is exactly what it does unasked:
 
 - If a tool isn't found, make sure it's on your `PATH` in `~/.zprofile`, not just `~/.zshrc`.
 - Detecting uv updates needs a uv recent enough for `uv tool list --outdated`. With an older uv, items show "Can't check", but **Update Now** still works.
+- Gemini CLI now serves Gemini Code Assist Standard and Enterprise and paid API keys; Google moved everyone else to Antigravity CLI (`agy`). PullDay covers both. Antigravity plugins installed from a marketplace rather than a git repo show "Not installed from a git repo".
 - Claude Code can auto-update third-party marketplaces itself (`/plugin` → Marketplaces). PullDay works either way and also covers skills that aren't plugins.
 - GitHub's API allows 60 unauthenticated requests an hour. Gemini extensions installed from GitHub releases show "Couldn't check" when that runs out.
 - A Claude Code plugin's "update available" comes from its marketplace being behind. If the marketplace is current but an installed plugin is stale, use **Update Now**.

@@ -1,7 +1,7 @@
 import Foundation
 
 enum SourceKind: String, CaseIterable, Identifiable, Sendable {
-    case plugin, gitSkill, uv, pipx, npm, claudeCode, codexPlugin, codexCLI, geminiExtension
+    case plugin, gitSkill, uv, pipx, npm, claudeCode, codexPlugin, codexCLI, geminiExtension, antigravityPlugin, antigravityCLI
 
     var id: String { rawValue }
 
@@ -16,6 +16,8 @@ enum SourceKind: String, CaseIterable, Identifiable, Sendable {
         case .codexPlugin: return "Codex plugin marketplaces"
         case .codexCLI: return "Codex CLI"
         case .geminiExtension: return "Gemini CLI extensions"
+        case .antigravityPlugin: return "Antigravity plugins"
+        case .antigravityCLI: return "Antigravity CLI"
         }
     }
 
@@ -30,6 +32,8 @@ enum SourceKind: String, CaseIterable, Identifiable, Sendable {
         case .codexPlugin: return "puzzlepiece.extension"
         case .codexCLI: return "terminal"
         case .geminiExtension: return "puzzlepiece.extension"
+        case .antigravityPlugin: return "puzzlepiece.extension"
+        case .antigravityCLI: return "terminal"
         }
     }
 
@@ -53,6 +57,10 @@ enum SourceKind: String, CaseIterable, Identifiable, Sendable {
             return "The `codex` command. Updated with `codex update`, which handles Homebrew, npm and the install script."
         case .geminiExtension:
             return "Extensions in ~/.gemini/extensions, updated with `gemini extensions update`. Linked extensions are skipped, and an update that needs your consent has to be run in a terminal."
+        case .antigravityPlugin:
+            return "Plugins installed with `agy plugin install` from a git repo, checked against that repo and updated by installing them again with `agy`, which keeps their enabled state."
+        case .antigravityCLI:
+            return "The `agy` command, Google's replacement for Gemini CLI. Updated with `agy update`."
         }
     }
 
@@ -64,6 +72,7 @@ enum SourceKind: String, CaseIterable, Identifiable, Sendable {
         case .plugin, .claudeCode: return [.claude]
         case .codexPlugin, .codexCLI: return [.codex]
         case .geminiExtension: return [.gemini]
+        case .antigravityPlugin, .antigravityCLI: return [.antigravity]
         case .gitSkill, .uv, .pipx, .npm: return []
         }
     }
@@ -71,7 +80,7 @@ enum SourceKind: String, CaseIterable, Identifiable, Sendable {
 
 /// A coding agent that loads skills or plugins PullDay keeps up to date.
 enum Agent: String, CaseIterable, Identifiable, Sendable {
-    case claude, codex, gemini, opencode, cursor
+    case claude, codex, gemini, antigravity, opencode, cursor
 
     var id: String { rawValue }
 
@@ -80,6 +89,7 @@ enum Agent: String, CaseIterable, Identifiable, Sendable {
         case .claude: return "Claude Code"
         case .codex: return "Codex"
         case .gemini: return "Gemini CLI"
+        case .antigravity: return "Antigravity"
         case .opencode: return "OpenCode"
         case .cursor: return "Cursor"
         }
@@ -91,6 +101,7 @@ enum Agent: String, CaseIterable, Identifiable, Sendable {
         case .claude: return ".claude"
         case .codex: return ".codex"
         case .gemini: return ".gemini"
+        case .antigravity: return ".gemini/config"   // created by `agy`; Gemini CLI doesn't use it
         case .opencode: return ".config/opencode"
         case .cursor: return ".cursor"
         }
