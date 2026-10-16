@@ -101,13 +101,31 @@ enum Shell {
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        // Read as output arrives rather than to end-of-file: a child the command left running in the background
+        // (a post-update command starting a daemon, say) can hold the pipe open long after the shell exits.
+        let reader = pipe.fileHandleForReading
+        var data = Data()
+        let endOfFile = DispatchSemaphore(value: 0)
+        reader.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                endOfFile.signal()
+            } else {
+                lock.lock(); data.append(chunk); lock.unlock()
+            }
+        }
         process.waitUntilExit()
         killer.cancel()
+        // End-of-file normally follows the exit at once; give up on it if a background child still holds the pipe.
+        // The pipe closes the handle when it's freed; closing it here could race a read still in flight.
+        if endOfFile.wait(timeout: .now() + 2) == .timedOut {
+            reader.readabilityHandler = nil
+        }
 
-        lock.lock(); let timedOut = didTimeOut; lock.unlock()
-        let output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        return ShellResult(status: process.terminationStatus, output: output, timedOut: timedOut)
+        lock.lock(); let timedOut = didTimeOut; let output = String(decoding: data, as: UTF8.self); lock.unlock()
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ShellResult(status: process.terminationStatus, output: trimmed, timedOut: timedOut)
     }
 
     /// Single-quotes a value for safe use inside a shell command.

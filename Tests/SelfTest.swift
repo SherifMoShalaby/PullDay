@@ -26,6 +26,7 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
         await migration()
         await codexRecords()
         await geminiUpdateGuard()
+        await backgroundChildDoesNotHang()
         print(failures == 0 ? "SelfTest: all checks passed" : "SelfTest: \(failures) failed")
         exit(failures == 0 ? 0 : 1)
     }
@@ -168,5 +169,17 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
         let real = await run(installs: true)
         check(real.ok, "a real update succeeds, got: \(real.summary)")
         unsetenv("ZDOTDIR")
+    }
+
+    /// A command that leaves a background child holding the output pipe (a post-update command that starts a
+    /// daemon, say) must not keep the run waiting for that child: the run ends soon after the shell exits.
+    static func backgroundChildDoesNotHang() async {
+        let start = Date()
+        let result = await Shell.run("(sleep 20 &); echo started", timeout: 60)
+        let seconds = Date().timeIntervalSince(start)
+        check(seconds < 10, "a background child holding the pipe doesn't block the run, took \(Int(seconds))s")
+        check(result.ok && result.output.contains("started"), "output written before the shell exits is kept, got: \(result.output)")
+        let big = await Shell.run("head -c 300000 /dev/zero | tr '\\0' x", timeout: 60)
+        check(big.output.count == 300_000, "output larger than the pipe buffer arrives whole, got \(big.output.count) bytes")
     }
 }
