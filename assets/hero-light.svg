@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="300" viewBox="0 0 880 300" role="img" aria-label="PullDay: never skip pull day. Keeps Claude Code, Codex, Gemini CLI, OpenCode and Cursor add-ons up to date.">
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <g transform="translate(20,20) scale(0.508)">
+    <rect x="50" y="56" width="412" height="412" rx="92" fill="#000000" fill-opacity="0.12"/>
+    <rect x="50" y="50" width="412" height="412" rx="92" fill="#15181F"/>
+    <line x1="132" y1="206" x2="380" y2="206" stroke="#F3F1EC" stroke-width="16" stroke-linecap="round"/>
+    <rect x="116" y="172" width="24" height="68" rx="7" fill="#F3F1EC"/>
+    <rect x="146" y="154" width="30" height="104" rx="8" fill="#F3F1EC"/>
+    <rect x="336" y="154" width="30" height="104" rx="8" fill="#F3F1EC"/>
+    <rect x="372" y="172" width="24" height="68" rx="7" fill="#F3F1EC"/>
+    <line x1="256" y1="236" x2="256" y2="358" stroke="#C8F03C" stroke-width="34" stroke-linecap="round"/>
+    <polyline points="198,306 256,364 314,306" fill="none" stroke="#C8F03C" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="316" y="112" font-size="64" font-weight="800" letter-spacing="-1.5" fill="#15181F">PullDay</text>
+  <text x="318" y="158" font-size="24" font-style="italic" fill="#57606A">Never skip pull day.</text>
+  <rect x="316" y="196" width="123" height="34" rx="17" fill="#15181F"/><text x="378" y="218" text-anchor="middle" font-size="15" font-weight="600" fill="#C8F03C">Claude Code</text><rect x="449" y="196" width="68" height="34" rx="17" fill="#15181F"/><text x="483" y="218" text-anchor="middle" font-size="15" font-weight="600" fill="#C8F03C">Codex</text><rect x="527" y="196" width="114" height="34" rx="17" fill="#15181F"/><text x="584" y="218" text-anchor="middle" font-size="15" font-weight="600" fill="#C8F03C">Gemini CLI</text><rect x="651" y="196" width="96" height="34" rx="17" fill="#15181F"/><text x="699" y="218" text-anchor="middle" font-size="15" font-weight="600" fill="#C8F03C">OpenCode</text><rect x="757" y="196" width="77" height="34" rx="17" fill="#15181F"/><text x="795" y="218" text-anchor="middle" font-size="15" font-weight="600" fill="#C8F03C">Cursor</text>
+  <text x="318" y="268" font-size="15" fill="#57606A">Your agents' skills, plugins and extensions, kept up to date from the menu bar.</text>
+  </g>
+</svg>

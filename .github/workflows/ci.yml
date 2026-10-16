@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Typecheck (warnings are errors)
+        run: swiftc -typecheck -warnings-as-errors -swift-version 5 -parse-as-library -target arm64-apple-macos13.0 Sources/*.swift
+      - name: Self-test
+        run: ./build.sh --test
+      - name: Build
+        run: ./build.sh
