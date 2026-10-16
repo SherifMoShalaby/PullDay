@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SherifMoShalaby/PullDay/releases/latest"><img src="https://img.shields.io/github/v/release/SherifMoShalaby/PullDay?style=flat-square&color=111111&label=release&cacheSeconds=3600" alt="Latest release"></a>
+  <a href="https://github.com/SherifMoShalaby/PullDay/releases/latest"><img src="https://img.shields.io/github/v/release/SherifMoShalaby/PullDay?style=flat-square&color=111111&label=release" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square" alt="macOS 13 or later">
   <img src="https://img.shields.io/badge/Swift-5-111111?style=flat-square" alt="Swift 5">
   <img src="https://img.shields.io/badge/works%20with-5%20agents-111111?style=flat-square" alt="Works with 5 agents">
