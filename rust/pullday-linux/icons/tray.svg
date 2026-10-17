@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+  <!-- The menu bar glyph (MenuBarLabel.glyph in Sources/App.swift) in the app icon's colors; tray.png is rendered from it. -->
+  <g fill="#F3F1EC">
+    <rect x="3.2" y="4.6" width="1.8" height="4.8" rx="0.5"/>
+    <rect x="5.6" y="3.4" width="2.2" height="7.2" rx="0.5"/>
+    <rect x="16.2" y="3.4" width="2.2" height="7.2" rx="0.5"/>
+    <rect x="19" y="4.6" width="1.8" height="4.8" rx="0.5"/>
+  </g>
+  <line x1="5" y1="7" x2="19" y2="7" stroke="#F3F1EC" stroke-width="1.6" stroke-linecap="round"/>
+  <g fill="none" stroke="#C8F03C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="9.6" x2="12" y2="19"/>
+    <polyline points="8.4,15.6 12,19.2 15.6,15.6"/>
+  </g>
+</svg>

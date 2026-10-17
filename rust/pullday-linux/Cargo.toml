@@ -1,0 +1,21 @@
+[package]
+name = "pullday-linux"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90" # tauri 2.12.4's own
+license = "MIT"
+description = "PullDay for Linux: the tray app"
+publish = false
+
+[[bin]]
+name = "pullday"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.4", features = ["tray-icon"] }
+# Feature unification: switches Tauri's own tray-icon 0.25 to the pure-D-Bus StatusNotifierItem backend, which
+# (unlike libappindicator) reports left clicks with their position. No default features: they link libxdo.
+tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }

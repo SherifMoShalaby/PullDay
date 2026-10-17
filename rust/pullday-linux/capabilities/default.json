@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "PullDay's own windows",
+  "windows": ["panel", "settings", "log"],
+  "permissions": ["core:event:default"]
+}

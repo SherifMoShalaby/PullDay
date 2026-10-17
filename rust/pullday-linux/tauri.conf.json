@@ -1,0 +1,14 @@
+{
+  "productName": "PullDay",
+  "version": "0.1.0",
+  "identifier": "dev.pullday.app",
+  "build": { "frontendDist": "ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+}

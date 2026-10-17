@@ -1,3 +1,5 @@
 [workspace]
-members = ["pullday-core"]
+members = ["pullday-core", "pullday-linux"]
+# The Linux app needs WebKitGTK; plain cargo commands at rust/ build and test only the core.
+default-members = ["pullday-core"]
 resolver = "2"
