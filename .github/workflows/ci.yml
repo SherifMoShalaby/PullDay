@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Typecheck (warnings are errors)
         run: swiftc -typecheck -warnings-as-errors -swift-version 5 -parse-as-library -target arm64-apple-macos13.0 Sources/*.swift
       - name: Self-test
@@ -31,11 +31,11 @@ jobs:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The runner images ship rustup; take the current stable rather than whatever the image has.
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal -c clippy -c rustfmt && rustup default stable
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
