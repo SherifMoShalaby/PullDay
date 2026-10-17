@@ -1,0 +1,14 @@
+item	gitSkill:~/repos/both	~/repos/both · manual updates only	claude,codex,gemini,opencode,cursor	true	-
+item	gitSkill:~/.claude/skills/claudeonly	~/.claude/skills/claudeonly	claude,opencode	false	-
+item	codexPlugin:local	superpowers	codex	false	unknown: Local marketplace; nothing to update
+item	codexPlugin:norecord	Marketplace (no plugins installed)	codex	false	unknown: No install record
+item	codexPlugin:norev	Marketplace (no plugins installed)	codex	false	unknown: Installed revision unknown
+item	geminiExtension:bare	v1	gemini	false	unknown: No install record
+item	geminiExtension:current	v2.0.0 · local	gemini	false	upToDate
+item	geminiExtension:gitplain	v1.0.0 · git	gemini	false	unknown: Not a git checkout
+item	geminiExtension:linked	Version unknown · link	gemini	false	unknown: Linked folder; nothing to update
+item	geminiExtension:moved	Version unknown · git	gemini	false	updateAvailable: Moved to https://github.com/n/r
+item	geminiExtension:odd	Version unknown · tarball	gemini	false	unknown: Unknown install type tarball
+item	geminiExtension:old	v1.0.0 · local	gemini	false	updateAvailable: v1.0.0 → v2.0.0
+item	antigravityPlugin:alpha	Version unknown · disabled	antigravity	false	unknown: Not installed from a git repo
+item	antigravityPlugin:ponytail	v5.3.1	antigravity	false	unknown: Not installed from a git repo

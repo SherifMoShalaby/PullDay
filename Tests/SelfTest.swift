@@ -20,6 +20,8 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
 @main struct SelfTest {
     static func main() async {
         defer { try? fm.removeItem(atPath: tmp) }
+        modelsGolden()
+        await scannerGolden()
         remoteRefs()
         sourceURLs()
         gitSkillDiscovery()
@@ -31,6 +33,104 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
         await backgroundChildDoesNotHang()
         print(failures == 0 ? "SelfTest: all checks passed" : "SelfTest: \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    /// The Rust port (rust/pullday-core) checks the same file, so the two stay in step.
+    static func modelsGolden() {
+        func names(_ agents: Set<Agent>) -> String { Agent.allCases.filter(agents.contains).map(\.rawValue).joined(separator: ",") }
+        var lines = SourceKind.allCases.map {
+            ["kind", $0.rawValue, $0.title, $0.symbol, $0.explanation, "\($0.enabledByDefault)", names($0.agents)].joined(separator: "\t")
+        }
+        lines += Agent.allCases.map { ["agent", $0.rawValue, $0.title, $0.homeDir].joined(separator: "\t") }
+        lines += Agent.skillRootReaders.map { ["root", $0.root, names($0.agents)].joined(separator: "\t") }
+        var items = SourceKind.allCases.flatMap { k in ["x", "graphifyy"].map { UpdatableItem(kind: k, name: $0, detail: "") } }
+        items.append(UpdatableItem(kind: .gitSkill, name: "x", detail: "", id: "gitSkill:/home/u/.claude/skills/x"))
+        lines += items.map { ["item", $0.id, names($0.agents)].joined(separator: "\t") }
+        golden("models.golden", lines)
+    }
+
+    /// Compares with a file in Tests/ that the Rust tests check too; WRITE_GOLDEN=1 rewrites it after a deliberate change.
+    static func golden(_ name: String, _ lines: [String], line: Int = #line) {
+        let dump = lines.joined(separator: "\n") + "\n"
+        let path = (#filePath as NSString).deletingLastPathComponent + "/" + name
+        if ProcessInfo.processInfo.environment["WRITE_GOLDEN"] != nil { fm.createFile(atPath: path, contents: Data(dump.utf8)) }
+        check((try? String(contentsOfFile: path, encoding: .utf8)) == dump, "matches Tests/\(name) (rerun with WRITE_GOLDEN=1 after a deliberate change)", line: line)
+    }
+
+    /// The same fixture home is scanned by rust/pullday-core/tests/parity.rs; both must print Tests/scanner.golden.
+    /// Only sources whose folders Swift takes as parameters (and that need no network) are in it.
+    static func scannerGolden() async {
+        let base = tmp + "/parity"
+        let dirs = ["home/.claude/skills/claudeonly/.git", "home/repos/both/.git", "home/.agents/skills", "home/.gemini/.git",
+                    "home/.gemini/skills/plain", "home/.config/.git", "home/.config/opencode/skills/plain", "home/dotfiles/.git",
+                    "home/dotfiles/cursor/skills/plain", "codex/mk/norecord", "codex/mk/.staging", "codex/cache/local/superpowers"]
+        let links = [("home/.claude/skills/both", "home/repos/both"), ("home/.agents/skills/both", "home/repos/both"),
+                     ("home/.cursor", "home/dotfiles/cursor")]
+        let local = "{\"source\":\"\(base)/gemini/src\",\"type\":\"local\"}"
+        let files = [
+            ("codex/mk/local/.codex-marketplace-install.json", #"{"source_type":"local","source":"/x","revision":"abc"}"#),
+            ("codex/mk/norev/.codex-marketplace-install.json", #"{"source_type":"git","source":"o/r","ref_name":"main"}"#),
+            ("gemini/src/gemini-extension.json", #"{"name":"src","version":"2.0.0"}"#),
+            ("gemini/ext/current/gemini-extension.json", #"{"name":"current","version":"2.0.0"}"#),
+            ("gemini/ext/current/.gemini-extension-install.json", local),
+            ("gemini/ext/old/gemini-extension.json", #"{"name":"old","version":"1.0.0"}"#),
+            ("gemini/ext/old/.gemini-extension-install.json", local),
+            ("gemini/ext/linked/gemini-extension.json", #"{"name":"linked"}"#),
+            ("gemini/ext/linked/.gemini-extension-install.json", #"{"source":"/x","type":"link"}"#),
+            ("gemini/ext/moved/gemini-extension.json", #"{"name":"moved","migratedTo":"https://github.com/n/r"}"#),
+            ("gemini/ext/moved/.gemini-extension-install.json", #"{"source":"o/r","type":"git"}"#),
+            ("gemini/ext/gitplain/gemini-extension.json", #"{"name":"gitplain","version":"1.0.0"}"#),
+            ("gemini/ext/gitplain/.gemini-extension-install.json", #"{"source":"o/r","type":"git"}"#),
+            ("gemini/ext/odd/gemini-extension.json", #"{"name":"odd"}"#),
+            ("gemini/ext/odd/.gemini-extension-install.json", #"{"type":"tarball"}"#),
+            ("gemini/ext/bare/gemini-extension.json", #"{"name":"bare","version":"1"}"#),
+            ("gemini/ext/nameless/gemini-extension.json", #"{"version":"1"}"#),
+        ]
+        for dir in dirs { mkdir("parity/" + dir) }
+        for (path, target) in links { link("parity/" + path, to: "parity/" + target) }
+        for (path, text) in files { write("parity/" + path, text) }
+        let agyList = #"[{"name": "ponytail", "enabled": true, "version": "5.3.1", "path": "/home/u/.gemini/config/plugins/ponytail"},"#
+            + #" {"name": "alpha", "enabled": false, "path": "/home/u/.gemini/config/plugins/alpha"}]"#
+
+        func text(_ status: ItemStatus?) -> String {
+            guard let status else { return "-" }
+            switch status {
+            case .unknown(let why): return why.map { "unknown: " + $0 } ?? "unknown"
+            case .checking: return "checking"
+            case .upToDate: return "upToDate"
+            case .updateAvailable(let offer): return offer.map { "updateAvailable: " + $0 } ?? "updateAvailable"
+            case .pinned(let s): return "pinned: " + s
+            case .skipped(let s): return "skipped: " + s
+            case .updating: return "updating"
+            case .updated(let s): return "updated: " + s
+            case .failed(let s): return "failed: " + s
+            }
+        }
+        func row(_ item: UpdatableItem, _ status: ItemStatus?) -> String {
+            let agents = Agent.allCases.filter(item.agents.contains).map(\.rawValue).joined(separator: ",")
+            return ["item", item.id, item.detail, agents, "\(item.manualOnly)", text(status)].joined(separator: "\t")
+        }
+        // git must not walk up out of the fixture (a temp folder inside a repo would give gitplain that repo's HEAD).
+        setenv("GIT_CEILING_DIRECTORIES", base, 1)
+        defer { unsetenv("GIT_CEILING_DIRECTORIES") }
+        var lines = Scanner.discoverGitSkills(home: base + "/home").map { row($0, nil) }
+        let codex = Scanner.discoverCodexPlugins(dir: base + "/codex/mk", cacheDir: base + "/codex/cache")
+        let codexStatuses = await Scanner.check(.codexPlugin, items: codex)
+        lines += codex.map { row($0, codexStatuses[$0.id]) }
+        for item in Scanner.discoverGeminiExtensions(dir: base + "/gemini/ext") {
+            lines.append(row(item, await Scanner.geminiExtensionStatus(item.path ?? "")))
+        }
+        for item in Scanner.antigravityPlugins(fromList: agyList) {
+            lines.append(row(item, await Scanner.antigravityPluginStatus(item.path ?? "")))
+        }
+        // The fixture's place differs per run and machine; Swift's tilde() is relative to the real home.
+        // The ~ forms first, for a temp folder inside the real home.
+        let resolved = (base as NSString).resolvingSymlinksInPath
+        let forms = [Scanner.tilde(resolved), Scanner.tilde(base), resolved, base]
+        golden("scanner.golden", lines.map { line in
+            forms.reduce(line) { $0.replacingOccurrences(of: $1, with: "<tmp>") }
+                .replacingOccurrences(of: "<tmp>/home", with: "~")
+        })
     }
 
     static func remoteRefs() {

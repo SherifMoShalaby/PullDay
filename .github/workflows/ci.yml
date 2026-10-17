@@ -19,3 +19,34 @@ jobs:
         run: ./build.sh --test
       - name: Build
         run: ./build.sh
+
+  # The Rust core of the Linux app (rust/), on Linux and macOS.
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      # The runner images ship rustup; take the current stable rather than whatever the image has.
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal -c clippy -c rustfmt && rustup default stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: cargo-${{ matrix.os }}-${{ hashFiles('rust/Cargo.lock') }}
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint (warnings are errors)
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked
+      - name: Release build
+        run: cargo build --locked --release

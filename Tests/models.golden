@@ -1,0 +1,45 @@
+kind	plugin	Claude Code plugins	puzzlepiece.extension	Marketplaces in ~/.claude/plugins/marketplaces, updated with `claude plugin marketplace update` and `claude plugin update`.	true	claude
+kind	gitSkill	Git-cloned skills	arrow.triangle.branch	Git repos in each agent's skills folder (~/.claude/skills, ~/.agents/skills, ~/.gemini/skills, ~/.config/opencode/skills, ~/.cursor/skills; symlinks followed), updated with `git pull --ff-only`.	true	
+kind	uv	uv tools	shippingbox	Tools from `uv tool install`, such as graphify. Updated with `uv tool upgrade`.	true	
+kind	pipx	pipx tools	cube.box	Tools from `pipx install`. Updated with `pipx upgrade`.	true	
+kind	npm	npm global packages	cube	Packages from `npm install -g`. Off by default because it lists every global package.	false	
+kind	claudeCode	Claude Code	terminal	The `claude` command in your terminal. A Homebrew install is updated with `brew upgrade --cask claude-code`. The Claude desktop app updates its own copy.	true	claude
+kind	codexPlugin	Codex plugin marketplaces	puzzlepiece.extension	Git marketplaces in ~/.codex/.tmp/marketplaces, updated with `codex plugin marketplace upgrade`, which also refreshes their installed plugins.	true	codex
+kind	codexCLI	Codex CLI	terminal	The `codex` command. Updated with `codex update`, which handles Homebrew, npm and the install script.	true	codex
+kind	geminiExtension	Gemini CLI extensions	puzzlepiece.extension	Extensions in ~/.gemini/extensions, updated with `gemini extensions update`. Linked extensions are skipped, and an update that needs your consent has to be run in a terminal.	true	gemini
+kind	antigravityPlugin	Antigravity plugins	puzzlepiece.extension	Plugins installed with `agy plugin install` from a git repo, checked against that repo and updated by installing them again with `agy`, which keeps their enabled state.	true	antigravity
+kind	antigravityCLI	Antigravity CLI	terminal	The `agy` command, Google's replacement for Gemini CLI. Updated with `agy update`.	true	antigravity
+agent	claude	Claude Code	.claude
+agent	codex	Codex	.codex
+agent	gemini	Gemini CLI	.gemini
+agent	antigravity	Antigravity	.gemini/config
+agent	opencode	OpenCode	.config/opencode
+agent	cursor	Cursor	.cursor
+root	.claude/skills	claude,opencode
+root	.agents/skills	codex,gemini,opencode,cursor
+root	.gemini/skills	gemini
+root	.config/opencode/skills	opencode
+root	.cursor/skills	cursor
+item	plugin:x	claude
+item	plugin:graphifyy	claude
+item	gitSkill:x	
+item	gitSkill:graphifyy	claude
+item	uv:x	
+item	uv:graphifyy	claude
+item	pipx:x	
+item	pipx:graphifyy	claude
+item	npm:x	
+item	npm:graphifyy	claude
+item	claudeCode:x	claude
+item	claudeCode:graphifyy	claude
+item	codexPlugin:x	codex
+item	codexPlugin:graphifyy	claude
+item	codexCLI:x	codex
+item	codexCLI:graphifyy	claude
+item	geminiExtension:x	gemini
+item	geminiExtension:graphifyy	claude
+item	antigravityPlugin:x	antigravity
+item	antigravityPlugin:graphifyy	claude
+item	antigravityCLI:x	antigravity
+item	antigravityCLI:graphifyy	claude
+item	gitSkill:/home/u/.claude/skills/x	

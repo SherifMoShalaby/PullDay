@@ -58,11 +58,20 @@ Add an `Agent` case with its `title` and `homeDir`, and list the skill folders i
 - Quote every value interpolated into a shell command with `Shell.quote`. Run git through `Scanner.git`, which turns off repository hooks and `file://` remotes.
 - Never answer a password or consent prompt on the user's behalf.
 - Use `@StateWrapper`, never `@State`: with the Command Line Tools SDK, `@State` is a SwiftUI macro whose plugin only ships with Xcode. `#Preview`, `@Entry` and `@Animatable` fail the same way.
-- No third-party dependencies.
+- No third-party dependencies in the Swift app.
+
+### The Linux core (`rust/`)
+
+The coming Linux app runs on a Rust port of the same logic, in `rust/pullday-core` (its one dependency is `serde_json`). The Swift code stays the reference: `Tests/models.golden` and `Tests/scanner.golden` are checked by both the Swift self-test and the Rust tests, so a change to how PullDay finds or checks things goes into both. After a deliberate change, `WRITE_GOLDEN=1 ./build.sh --test` rewrites them.
+
+```bash
+cd rust && cargo test   # Linux or macOS, no network
+```
 
 ## Pull requests
 
 - One change per pull request, with a sentence on why.
 - `./build.sh --test` passes, and `./build.sh` builds without new warnings.
+- If you touched `rust/` or a golden file, `cargo test`, `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check` pass in `rust/`. CI runs them on Ubuntu and macOS.
 - If you changed what PullDay finds or runs, say how you checked it against a real install, and update the README.
 - Add a line for users under `## Unreleased` in `CHANGELOG.md` if they'd notice the change. [RELEASING.md](RELEASING.md) covers the rest of a release.
