@@ -226,17 +226,15 @@ pub fn uv_statuses(output: &str, items: &[UpdatableItem]) -> Statuses {
         };
         let name = words(line).first().copied().unwrap_or("");
         let version = after.split(']').next().unwrap_or("");
-        latest.insert(
-            name,
-            if version.starts_with('v') {
-                version.into()
-            } else {
-                format!("v{version}")
-            },
-        );
-        if let Some(pin) = exact_pin(line) {
+        let shown = if version.starts_with('v') {
+            version.to_string()
+        } else {
+            format!("v{version}")
+        };
+        if let Some(pin) = uv_pin(line, &shown) {
             pinned.insert(name, pin);
         }
+        latest.insert(name, shown);
     }
     items
         .iter()
@@ -245,9 +243,7 @@ pub fn uv_statuses(output: &str, items: &[UpdatableItem]) -> Statuses {
                 latest.get(item.name.as_str()),
                 pinned.get(item.name.as_str()),
             ) {
-                (Some(version), Some(pin)) => {
-                    ItemStatus::Pinned(format!("Pinned to {pin} · {version} available"))
-                }
+                (_, Some(pin)) => ItemStatus::Pinned(pin.clone()),
                 (Some(version), None) => {
                     ItemStatus::UpdateAvailable(Some(format!("{} → {version}", item.detail)))
                 }
@@ -258,13 +254,20 @@ pub fn uv_statuses(output: &str, items: &[UpdatableItem]) -> Statuses {
         .collect()
 }
 
-/// `uv tool upgrade` never moves past an exact pin (installed as `tool==X`). A wildcard (`==0.3.*`)
-/// or a range (`==1,<2`) can still move, so those aren't treated as pins.
-pub fn exact_pin(line: &str) -> Option<String> {
-    let (_, after) = line.split_once("[required: ==")?;
-    let version: String = after.chars().take_while(|&c| c != ']').collect();
-    (!version.is_empty() && !version.contains('*') && !version.contains(','))
-        .then(|| format!("=={version}"))
+/// Why `uv tool upgrade` won't move a tool to the `latest` PyPI release, if it won't: an exact pin (`tool==X`; a
+/// wildcard `==0.3.*` or a range `==1,<2` can still move), or a requirement that is a URL or path
+/// (`git+https://…@v1`), which upgrades from there and never to PyPI.
+pub fn uv_pin(line: &str, latest: &str) -> Option<String> {
+    let (_, after) = line.split_once("[required:")?;
+    let spec = after.split(']').next().unwrap_or("").trim();
+    if spec.len() > 2 && spec.starts_with("==") && !spec.contains('*') && !spec.contains(',') {
+        return Some(format!("Pinned to {spec} · {latest} available"));
+    }
+    let url = ["git+", "file:", "/", "."]
+        .iter()
+        .any(|p| spec.starts_with(p))
+        || spec.contains("://");
+    url.then(|| format!("Installed from {spec} · {latest} on PyPI"))
 }
 
 /// graphify's skill files are copied by `graphify install`, not by upgrading the CLI, so they can
@@ -698,7 +701,14 @@ mod tests {
             s["uv:wild"].is_update_available() && s["uv:range"].is_update_available(),
             "only exact pins are pins"
         );
-        assert!(s["uv:specify-cli"].is_update_available(), "as in Swift");
+        assert_eq!(
+            s["uv:specify-cli"],
+            ItemStatus::Pinned(
+                "Installed from git+https://github.com/github/spec-kit.git@v0.4.3 · v1.2.1 on PyPI"
+                    .into()
+            ),
+            "a git install isn't offered the PyPI release"
+        );
         assert_eq!(s["uv:current"], ItemStatus::UpToDate);
     }
 

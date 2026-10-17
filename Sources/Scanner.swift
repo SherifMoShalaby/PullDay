@@ -548,13 +548,19 @@ enum Scanner {
         return out
     }
 
-    /// `uv tool upgrade` never moves past an exact pin (installed as `tool==X`). A wildcard (`==0.3.*`)
-    /// or a range (`==1,<2`) can still move, so those aren't treated as pins.
-    static func exactPin(in line: String) -> String? {
-        guard let req = line.range(of: "[required: ==") else { return nil }
-        let version = line[req.upperBound...].prefix { $0 != "]" }
-        guard !version.isEmpty, !version.contains("*"), !version.contains(",") else { return nil }
-        return "==" + version
+    /// Why `uv tool upgrade` won't move a tool to the `latest` PyPI release, if it won't: an exact pin (`tool==X`; a
+    /// wildcard `==0.3.*` or a range `==1,<2` can still move), or a requirement that is a URL or path
+    /// (`git+https://…@v1`), which upgrades from there and never to PyPI.
+    static func uvPin(in line: String, latest: String) -> String? {
+        guard let req = line.range(of: "[required:") else { return nil }
+        let spec = line[req.upperBound...].prefix { $0 != "]" }.trimmingCharacters(in: .whitespaces)
+        if spec.hasPrefix("=="), spec.count > 2, !spec.contains("*"), !spec.contains(",") {
+            return "Pinned to \(spec) · \(latest) available"
+        }
+        if spec.hasPrefix("git+") || spec.contains("://") || spec.hasPrefix("file:") || spec.hasPrefix("/") || spec.hasPrefix(".") {
+            return "Installed from \(spec) · \(latest) on PyPI"
+        }
+        return nil
     }
 
     static func checkUV(_ items: [UpdatableItem]) async -> [String: ItemStatus] {
@@ -562,19 +568,25 @@ enum Scanner {
         guard result.ok else {
             return statuses(items, .unknown("Can't check: update uv to get `uv tool list --outdated`"))
         }
+        return uvStatuses(result.output, items)
+    }
+
+    /// Parses `uv tool list --outdated --show-version-specifiers`: "name vX [required: …] [latest: Y]" per outdated tool.
+    static func uvStatuses(_ output: String, _ items: [UpdatableItem]) -> [String: ItemStatus] {
         var latest: [String: String] = [:]
         var pinned: [String: String] = [:]
-        for line in result.lines {
+        for line in output.split(whereSeparator: \.isNewline).map(String.init) {
             guard let range = line.range(of: "[latest: ") else { continue }
             let name = String(line.split(separator: " ").first ?? "")
             let version = String(line[range.upperBound...].prefix { $0 != "]" })
-            latest[name] = version.hasPrefix("v") ? version : "v" + version
-            if let pin = exactPin(in: line) { pinned[name] = pin }
+            let shown = version.hasPrefix("v") ? version : "v" + version
+            latest[name] = shown
+            if let pin = uvPin(in: line, latest: shown) { pinned[name] = pin }
         }
         var out: [String: ItemStatus] = [:]
         for item in items {
-            if let version = latest[item.name], let pin = pinned[item.name] {
-                out[item.id] = .pinned("Pinned to \(pin) · \(version) available")
+            if let pin = pinned[item.name] {
+                out[item.id] = .pinned(pin)
             } else if let version = latest[item.name] {
                 out[item.id] = .updateAvailable("\(item.detail) → \(version)")
             } else {
@@ -626,6 +638,11 @@ enum Scanner {
 
     static func update(_ item: UpdatableItem, postCommand: String?) async -> UpdateResult {
         let t = Transcript()
+        // The name comes from a folder or a manifest; quoting doesn't stop one like `--all` being read as an option.
+        if item.name.hasPrefix("-") {
+            t.note("PullDay won't pass the name \(item.name) to a command.")
+            return UpdateResult(ok: false, summary: t.lastFailure ?? "", output: t.text)
+        }
         let q = Shell.quote(item.name)
         var ok = false
 

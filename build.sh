@@ -84,7 +84,15 @@ fi
 
 if [[ "${1:-}" == "--install" ]]; then
   pkill -x PullDay 2>/dev/null || true
-  rm -rf /Applications/PullDay.app
+  # The previous install goes to the Trash, so it can be put back: `trash` is macOS 15+, Finder covers 13 and 14.
+  OLD=/Applications/PullDay.app
+  if [[ -e "$OLD" ]]; then
+    if [[ -x /usr/bin/trash ]]; then
+      /usr/bin/trash "$OLD"
+    else
+      osascript -e "tell application \"Finder\" to delete POSIX file \"$OLD\"" > /dev/null
+    fi || { echo "Couldn't move $OLD to the Trash, so nothing was installed."; exit 1; }
+  fi
   cp -R "$APP" /Applications/
   open /Applications/PullDay.app
   echo "Installed to /Applications and launched. Look for the barbell icon in your menu bar."

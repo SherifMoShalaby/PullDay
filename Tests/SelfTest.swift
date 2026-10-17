@@ -29,6 +29,8 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
         await codexRecords()
         await geminiUpdateGuard()
         await antigravity()
+        await optionLikeNames()
+        uvPins()
         unsetenv("ZDOTDIR")
         await backgroundChildDoesNotHang()
         print(failures == 0 ? "SelfTest: all checks passed" : "SelfTest: \(failures) failed")
@@ -318,6 +320,33 @@ func link(_ path: String, to target: String) { try? fm.createSymbolicLink(atPath
         let refused = await Scanner.update(local, postCommand: nil)
         check(!refused.ok && !fm.fileExists(atPath: tmp + "/agy-install-ran"), "a local-path origin is never reinstalled, got: \(refused.summary)")
         check(await Scanner.antigravityPluginStatus(tmp + "/agy/plugins") == .unknown("Not installed from a git repo"), "a non-git plugin can't be checked")
+    }
+
+    /// Exact pins and URL requirements (the specify-cli line is from a real uv) aren't offered as updates.
+    static func uvPins() {
+        let output = """
+        graphifyy v0.5.1 [latest: 0.6.0]
+        - graphify
+        pinned v1.0.0 [required: ==1.0.0] [latest: 1.2.0]
+        wild v0.3.1 [required: ==0.3.*] [latest: 0.4.0]
+        specify-cli v0.4.3 [required:  git+https://github.com/github/spec-kit.git@v0.4.3] [latest: 1.2.1]
+        """
+        let items = ["graphifyy", "pinned", "wild", "specify-cli", "current"].map { UpdatableItem(kind: .uv, name: $0, detail: "v0.5.1") }
+        let s = Scanner.uvStatuses(output, items)
+        check(s["uv:graphifyy"] == .updateAvailable("v0.5.1 → v0.6.0"), "an update")
+        check(s["uv:pinned"] == .pinned("Pinned to ==1.0.0 · v1.2.0 available"), "an exact pin")
+        check(s["uv:wild"]?.isUpdateAvailable == true, "a wildcard can still move")
+        check(s["uv:specify-cli"] == .pinned("Installed from git+https://github.com/github/spec-kit.git@v0.4.3 · v1.2.1 on PyPI"),
+              "a git install isn't offered the PyPI release, got: \(String(describing: s["uv:specify-cli"]))")
+        check(s["uv:current"] == .upToDate, "not listed: up to date")
+    }
+
+    /// A name like `--all` (from an extension's manifest, say) would be read as an option, so update runs nothing.
+    static func optionLikeNames() async {
+        let item = UpdatableItem(kind: .geminiExtension, name: "--all", detail: "", path: tmp + "/nowhere")
+        let result = await Scanner.update(item, postCommand: "touch \(Shell.quote(tmp + "/post-ran"))")
+        check(!result.ok && result.summary.contains("won't pass the name --all") && !result.output.contains("$ ")
+              && !fm.fileExists(atPath: tmp + "/post-ran"), "an option-looking name runs no command, got: \(result.summary)")
     }
 
     /// A command that leaves a background child holding the output pipe (a post-update command that starts a

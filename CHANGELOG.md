@@ -2,6 +2,11 @@
 
 What changed in each release. New entries go under **Unreleased**; releasing renames that heading to the version and date. Each GitHub release shows its version's section.
 
+## Unreleased
+
+- A uv tool installed from git (or another URL or path) no longer shows the PyPI release as an update it can never install; it's shown as pinned instead.
+- An extension or marketplace whose name starts with `-` is never updated, so a name like `--all` can't be read as an option by `gemini`, `codex` or `claude`.
+
 ## 1.0.2 - 2026-10-16
 
 - Antigravity, Google's replacement for Gemini CLI: PullDay keeps the `agy` command up to date, and plugins installed with `agy plugin install` from a git repo, which it updates in place so they stay enabled or disabled as you left them.
