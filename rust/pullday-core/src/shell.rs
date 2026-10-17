@@ -370,14 +370,15 @@ mod tests {
                 "sleep 30 & echo $! > {}; wait",
                 quote(pidfile.to_str().unwrap())
             ),
-            Duration::from_secs(1),
+            // Long enough for a slow login profile (GitHub's runners) to finish before the sleep starts.
+            Duration::from_secs(3),
         );
         assert!(
             r.timed_out && !r.ok() && r.last_line("") == "Timed out",
             "{r:?}"
         );
         assert!(
-            start.elapsed() < Duration::from_secs(5),
+            start.elapsed() < Duration::from_secs(8),
             "took {:?}",
             start.elapsed()
         );
@@ -406,17 +407,18 @@ mod tests {
     #[test]
     fn a_left_behind_reader_lets_go_of_the_pipe() {
         // After `run` returns, the background child's next write ends the reader, which closes the pipe,
-        // so the write after that fails (as under Swift) instead of being buffered forever.
+        // so the write after that fails (as under Swift) instead of being buffered forever. The first write comes
+        // well after `run` gives up on end-of-file (2 s after the shell exits), so the two can't race.
         let dir = tmp("reader");
         let flag = dir.join("still-read");
         let cmd = format!(
-            "(sleep 2; echo late; sleep 1; echo later && touch {}) & echo started",
+            "(sleep 4; echo late; sleep 1; echo later && touch {}) & echo started",
             quote(flag.to_str().unwrap())
         );
         assert!(run(&cmd, Duration::from_secs(60))
             .output
             .contains("started"));
-        thread::sleep(Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(6));
         assert!(
             !flag.exists(),
             "the pipe was still being read after run returned"
