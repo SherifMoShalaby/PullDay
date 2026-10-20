@@ -2657,9 +2657,12 @@ dependencies = [
 name = "pullday-linux"
 version = "0.1.0"
 dependencies = [
+ "pullday-core",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tray-icon",
+ "zbus",
 ]
 
 [[package]]

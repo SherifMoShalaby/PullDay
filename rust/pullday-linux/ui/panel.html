@@ -4,6 +4,34 @@
   <meta charset="utf-8">
   <title>PullDay</title>
   <link rel="stylesheet" href="style.css">
+  <script src="common.js" defer></script>
+  <script src="app.js" defer></script>
 </head>
-<body></body>
+<body>
+  <div id="app">
+    <header class="header">
+      <div class="titles">
+        <div class="title">PullDay</div>
+        <div id="status" class="caption secondary"></div>
+      </div>
+      <span id="busy" class="icon i-loader-circle spin" hidden></span>
+      <button id="refresh" class="plain" title="Check for updates now" aria-label="Check for updates now"><span class="icon i-rotate-cw"></span></button>
+    </header>
+    <div id="note" class="note caption" hidden></div>
+    <div id="banner" class="banner" hidden>
+      <span class="icon i-circle-arrow-down accent"></span>
+      <span id="banner-text" class="banner-text"></span>
+      <button id="update-all" class="prominent">Update All</button>
+    </div>
+    <div id="list" class="list"></div>
+    <div id="empty" class="empty" hidden></div>
+    <footer class="footer">
+      <button id="settings" class="plain"><span class="icon i-settings"></span>Settings</button>
+      <button id="log" class="plain"><span class="icon i-list"></span>Log</button>
+      <span class="spacer"></span>
+      <button id="quit" class="plain">Quit</button>
+    </footer>
+  </div>
+  <div id="menu" class="menu" role="menu" hidden></div>
+</body>
 </html>

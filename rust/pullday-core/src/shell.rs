@@ -6,6 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -126,6 +127,17 @@ pub fn login_shell() -> String {
     login_shell_from(std::env::var("SHELL").ok().as_deref())
 }
 
+/// Set by the Linux app when it forced `GDK_BACKEND=x11` on itself (XWayland), so the tools it starts don't get it.
+pub static DROP_GDK_BACKEND: AtomicBool = AtomicBool::new(false);
+
+/// The environment every child PullDay starts gets.
+pub fn child_env(c: &mut Command) -> &mut Command {
+    if DROP_GDK_BACKEND.load(Ordering::Relaxed) {
+        c.env_remove("GDK_BACKEND");
+    }
+    c
+}
+
 pub fn run(command: &str, timeout: Duration) -> ShellResult {
     let shell = login_shell();
     let path = extra_paths(&home()).join(":");
@@ -137,21 +149,22 @@ pub fn run(command: &str, timeout: Duration) -> ShellResult {
         // Built in this block so the Command, which holds the pipe's write ends, is dropped after the
         // spawn; otherwise end-of-file would never arrive.
         let mut c = Command::new(&shell);
-        c.args([
-            "-l",
-            "-c",
-            &format!("export PATH=\"$PATH:{path}\"; {command}"),
-        ])
-        .env("TERM", "dumb")
-        .env("NO_COLOR", "1")
-        .env("GIT_TERMINAL_PROMPT", "0") // never hang on a password prompt
-        .env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
-        .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
-        .env("npm_config_fund", "false")
-        .env("npm_config_update_notifier", "false")
-        .stdin(Stdio::null())
-        // Its own process group, so the timeout's signal to -pid also reaches what the shell spawned.
-        .process_group(0);
+        child_env(&mut c)
+            .args([
+                "-l",
+                "-c",
+                &format!("export PATH=\"$PATH:{path}\"; {command}"),
+            ])
+            .env("TERM", "dumb")
+            .env("NO_COLOR", "1")
+            .env("GIT_TERMINAL_PROMPT", "0") // never hang on a password prompt
+            .env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+            .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+            .env("npm_config_fund", "false")
+            .env("npm_config_update_notifier", "false")
+            .stdin(Stdio::null())
+            // Its own process group, so the timeout's signal to -pid also reaches what the shell spawned.
+            .process_group(0);
         match writer.try_clone() {
             Ok(w) => c.stdout(w).stderr(writer).spawn(),
             Err(e) => Err(e),
@@ -327,6 +340,24 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_forced_gdk_backend_is_not_passed_on() {
+        // Safe here: std's environment lock covers spawning, and no other test reads GDK_BACKEND.
+        std::env::set_var("GDK_BACKEND", "x11");
+        let seen = || {
+            run(
+                "printf %s \"${GDK_BACKEND-unset}\"",
+                Duration::from_secs(30),
+            )
+            .last_line("")
+        };
+        assert_eq!(seen(), "x11", "the user's own choice is passed on");
+        DROP_GDK_BACKEND.store(true, Ordering::Relaxed);
+        assert_eq!(seen(), "unset");
+        DROP_GDK_BACKEND.store(false, Ordering::Relaxed);
+        std::env::remove_var("GDK_BACKEND");
     }
 
     #[test]

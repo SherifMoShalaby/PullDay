@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PullDay Settings</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="common.js" defer></script>
+  <script src="settings.js" defer></script>
+</head>
+<body class="window">
+  <nav class="tabs" role="tablist">
+    <a class="tab" role="tab" href="#general" id="tab-general"><span class="icon i-settings"></span>General</a>
+    <a class="tab" role="tab" href="#sources" id="tab-sources"><span class="icon i-layers"></span>Sources</a>
+    <a class="tab" role="tab" href="#items" id="tab-items"><span class="icon i-list"></span>Items</a>
+  </nav>
+
+  <main id="general" class="pane" role="tabpanel" hidden>
+    <div class="box">
+      <label class="field">
+        <span>Check for updates</span>
+        <select id="interval">
+          <option value="21600">Every 6 hours</option>
+          <option value="43200">Every 12 hours</option>
+          <option value="86400">Daily</option>
+          <option value="604800">Weekly</option>
+          <option value="0">Only when I ask</option>
+        </select>
+      </label>
+      <label class="field"><span>Install updates automatically</span><input type="checkbox" role="switch" id="auto-update"></label>
+      <label class="field"><span>Show notifications</span><input type="checkbox" role="switch" id="notify"></label>
+    </div>
+    <p class="box-footer caption secondary">Scheduled checks also run when PullDay starts and after your computer wakes, if one is due. Ignored items are never touched.</p>
+    <div class="box">
+      <label class="field"><span>Open PullDay at login</span><input type="checkbox" role="switch" id="login"></label>
+      <div id="login-error" class="field caption error" hidden></div>
+    </div>
+  </main>
+
+  <main id="sources" class="pane" role="tabpanel" hidden>
+    <h2 class="box-title">Agents</h2>
+    <div id="agents" class="box"></div>
+    <h2 class="box-title">Sources</h2>
+    <div id="kinds" class="box"></div>
+  </main>
+
+  <main id="items" class="pane" role="tabpanel" hidden>
+    <p id="items-intro" class="intro secondary">Ignore anything PullDay shouldn't touch, and add a command to run after an item updates. For example, `graphify install` copies graphify's new skill files into Claude Code.</p>
+    <div id="items-empty" class="items-empty secondary" hidden>No items found yet. Run a check from the tray icon.</div>
+    <div id="item-list" class="item-list"></div>
+  </main>
+</body>
+</html>

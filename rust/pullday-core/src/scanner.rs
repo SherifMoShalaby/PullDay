@@ -39,6 +39,27 @@ impl Scanner {
         format!("{}/{relative}", self.home)
     }
 
+    /// The folders whose entries the app watches for a quick rescan (Swift `AppState.watchFolders()`): every skill
+    /// root, the Claude marketplaces, and the Codex / Gemini / Antigravity folders only while their kind is on
+    /// (Codex upgrades churn through a .staging folder).
+    pub fn watched_dirs(&self, enabled_kinds: &BTreeSet<String>) -> Vec<String> {
+        let optional = [
+            (SourceKind::CodexPlugin, ".codex/.tmp/marketplaces"),
+            (SourceKind::GeminiExtension, ".gemini/extensions"),
+            (SourceKind::AntigravityPlugin, ".gemini/config/plugins"),
+        ]
+        .into_iter()
+        .filter(|(kind, _)| enabled_kinds.contains(kind.id()))
+        .map(|(_, dir)| dir);
+        Agent::skill_root_readers()
+            .into_iter()
+            .map(|(root, _)| root)
+            .chain([".claude/plugins/marketplaces"])
+            .chain(optional)
+            .map(|dir| self.path(dir))
+            .collect()
+    }
+
     // Discover
 
     pub fn discover(&self, kind: SourceKind) -> Vec<UpdatableItem> {
@@ -936,6 +957,40 @@ mod tests {
         fn link(&self, rel: &str, to: &str) {
             symlink(self.0.join(to), self.0.join(rel)).unwrap();
         }
+    }
+
+    #[test]
+    fn watched_dirs_match_the_swift_watch_folders_list() {
+        let s = Scanner::new("/h");
+        let kinds = |ids: &[&str]| ids.iter().map(|k| k.to_string()).collect();
+        // Swift: Scanner.skillRoots + [marketplacesDir] + the optional folders whose kind is on, in this order.
+        let base = [
+            "/h/.claude/skills",
+            "/h/.agents/skills",
+            "/h/.gemini/skills",
+            "/h/.config/opencode/skills",
+            "/h/.cursor/skills",
+            "/h/.claude/plugins/marketplaces",
+        ];
+        assert_eq!(s.watched_dirs(&kinds(&["plugin", "gitSkill", "uv"])), base);
+        let all = s.watched_dirs(&kinds(&[
+            "antigravityPlugin",
+            "geminiExtension",
+            "codexPlugin",
+        ]));
+        assert_eq!(all[..6], base);
+        assert_eq!(
+            all[6..],
+            [
+                "/h/.codex/.tmp/marketplaces",
+                "/h/.gemini/extensions",
+                "/h/.gemini/config/plugins"
+            ]
+        );
+        assert_eq!(
+            s.watched_dirs(&kinds(&["geminiExtension"]))[6..],
+            ["/h/.gemini/extensions"]
+        );
     }
     impl Drop for Tmp {
         fn drop(&mut self) {

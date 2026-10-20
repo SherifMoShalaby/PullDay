@@ -52,7 +52,11 @@ pub struct Core {
     /// Newest first, at most 200.
     pub log: Vec<LogEntry>,
     pub log_file: PathBuf,
+    /// Called with the items, prefs and log as a check or update progresses (the Mac gets this from `@Published`).
+    pub on_change: Option<OnChange>,
 }
+
+pub type OnChange = Box<dyn FnMut(&[UpdatableItem], &Prefs, &[LogEntry]) + Send>;
 
 impl Core {
     pub fn new(scanner: Scanner, prefs: Prefs, log_file: PathBuf) -> Core {
@@ -62,23 +66,17 @@ impl Core {
             items: Vec::new(),
             log: Vec::new(),
             log_file,
+            on_change: None,
         }
     }
 
     pub fn visible_items(&self) -> Vec<&UpdatableItem> {
-        let ignored = self.prefs.ignored();
-        self.items
-            .iter()
-            .filter(|i| !ignored.contains(&i.id))
-            .collect()
+        visible(&self.items, &self.prefs)
     }
 
     /// In list order, which is also the order "Update all" runs them in.
     pub fn updates_available(&self) -> Vec<&UpdatableItem> {
-        self.visible_items()
-            .into_iter()
-            .filter(|i| i.status.is_update_available())
-            .collect()
+        updates_available(&self.items, &self.prefs)
     }
 
     // Scheduling
@@ -151,7 +149,16 @@ impl Core {
                 ItemStatus::Checking
             };
         }
-        let statuses: Vec<_> = std::thread::scope(|s| {
+        let (prefs, log) = (&self.prefs, &self.log);
+        let on_change = &mut self.on_change;
+        let mut changed = |items: &[UpdatableItem]| {
+            if let Some(f) = on_change.as_mut() {
+                f(items, prefs, log)
+            }
+        };
+        changed(&found);
+        std::thread::scope(|s| {
+            let (tx, rx) = std::sync::mpsc::channel();
             let running: Vec<_> = kinds
                 .iter()
                 .map(|&kind| {
@@ -160,27 +167,29 @@ impl Core {
                         .filter(|i| i.kind == kind && !ignored.contains(&i.id))
                         .cloned()
                         .collect();
+                    let tx = tx.clone();
                     s.spawn(move || {
-                        if subset.is_empty() {
-                            Default::default()
-                        } else {
-                            scanner.check(kind, &subset)
+                        if !subset.is_empty() {
+                            let _ = tx.send(scanner.check(kind, &subset));
                         }
                     })
                 })
                 .collect();
-            running
-                .into_iter()
-                .map(|h| h.join().unwrap_or_default())
-                .collect()
-        });
-        for map in statuses {
-            for item in &mut found {
-                if let Some(status) = map.get(&item.id) {
-                    item.status = status.clone();
+            drop(tx);
+            // Each kind's results as its check finishes, as the Mac applies them; a check that panics sends nothing.
+            for map in rx {
+                for item in &mut found {
+                    if let Some(status) = map.get(&item.id) {
+                        item.status = status.clone();
+                    }
                 }
+                changed(&found);
             }
-        }
+            // Joined here so a panicked check doesn't make the scope panic.
+            for h in running {
+                let _ = h.join();
+            }
+        });
         let mut skipped = self.prefs.skipped_updates();
         let skips_before = skipped.len();
         for item in &mut found {
@@ -196,6 +205,7 @@ impl Core {
             }
         }
         self.items = found;
+        self.changed();
         if skipped.len() != skips_before {
             self.prefs.set_skipped_updates(&skipped)?;
         }
@@ -247,6 +257,7 @@ impl Core {
                 continue;
             };
             self.items[index].status = ItemStatus::Updating;
+            self.changed();
             let item = self.items[index].clone();
             let result = self
                 .scanner
@@ -261,6 +272,7 @@ impl Core {
             } else {
                 ItemStatus::Failed(result.summary)
             };
+            self.changed();
             if result.ok {
                 updated.push(item)
             } else {
@@ -357,6 +369,12 @@ impl Core {
         Ok(())
     }
 
+    fn changed(&mut self) {
+        if let Some(f) = self.on_change.as_mut() {
+            f(&self.items, &self.prefs, &self.log)
+        }
+    }
+
     pub fn clear_log(&mut self) {
         self.log.clear();
     }
@@ -372,6 +390,19 @@ impl Core {
         self.log.insert(0, entry);
         self.log.truncate(200);
     }
+}
+
+/// The items that aren't ignored; free functions so the app can use them on the items its progress hook gets.
+pub fn visible<'a>(items: &'a [UpdatableItem], prefs: &Prefs) -> Vec<&'a UpdatableItem> {
+    let ignored = prefs.ignored();
+    items.iter().filter(|i| !ignored.contains(&i.id)).collect()
+}
+
+pub fn updates_available<'a>(items: &'a [UpdatableItem], prefs: &Prefs) -> Vec<&'a UpdatableItem> {
+    visible(items, prefs)
+        .into_iter()
+        .filter(|i| i.status.is_update_available())
+        .collect()
 }
 
 /// Which updates the schedule installs (ids) and which it only announces (names).
@@ -643,6 +674,54 @@ mod tests {
             c.run_if_due(now).unwrap().is_empty(),
             "no notifications when they're off"
         );
+    }
+
+    /// The hook sees every row Checking, then one kind's results at a time, then the final list; an update shows
+    /// Updating, then its result.
+    #[test]
+    fn the_hook_follows_a_check_kind_by_kind_and_an_update() {
+        let t = Tmp::new("hook");
+        let mut c = core(&t);
+        // A git skill whose remote is a local path fails its fetch at once, with no network.
+        let repo = t.p("home/.claude/skills/local");
+        let setup = format!(
+            "git init -q {r} && git -C {r} remote add origin {o}",
+            r = crate::shell::quote(&repo),
+            o = crate::shell::quote(&t.p("elsewhere"))
+        );
+        assert!(crate::shell::run(&setup, Duration::from_secs(30)).ok());
+        c.prefs
+            .set_enabled_kinds(&["geminiExtension".to_string(), "gitSkill".to_string()].into())
+            .unwrap();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+        let sink = seen.clone();
+        c.on_change = Some(Box::new(move |items, _, _| {
+            sink.lock()
+                .unwrap()
+                .push(items.iter().map(|i| describe(&i.status)).collect())
+        }));
+        c.refresh(true).unwrap();
+        let calls = seen.lock().unwrap().clone();
+        let checking = |call: &Vec<String>| call.iter().filter(|s| *s == "checking").count();
+        assert_eq!(calls.len(), 4, "start, one per kind, end: {calls:?}");
+        assert_eq!(checking(&calls[0]), 3);
+        assert!(
+            [1, 2].contains(&checking(&calls[1])),
+            "one kind at a time: {calls:?}"
+        );
+        assert_eq!(checking(&calls[2]), 0);
+        assert_eq!(calls[3], calls[2]);
+
+        seen.lock().unwrap().clear();
+        let mut old = UpdatableItem::new(SourceKind::AntigravityPlugin, "old", "v1", None);
+        old.path = Some(t.p("home"));
+        c.items = vec![old];
+        c.update(&["antigravityPlugin:old".to_string()], false)
+            .unwrap();
+        let calls = seen.lock().unwrap().clone();
+        assert_eq!(calls.len(), 2, "{calls:?}");
+        assert_eq!(calls[0], ["updating"]);
+        assert!(calls[1][0].starts_with("error: "), "{calls:?}");
     }
 
     #[test]

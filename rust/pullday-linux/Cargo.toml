@@ -15,7 +15,11 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+pullday-core = { path = "../pullday-core" }
+serde_json = "1"
 tauri = { version = "2.12.4", features = ["tray-icon"] }
 # Feature unification: switches Tauri's own tray-icon 0.25 to the pure-D-Bus StatusNotifierItem backend, which
 # (unlike libappindicator) reports left clicks with their position. No default features: they link libxdo.
 tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }
+# Notifications (org.freedesktop.Notifications). Already in the tree through ksni; `blocking-api` adds no package.
+zbus = { version = "5.19", default-features = false, features = ["async-io", "blocking-api"] }
