@@ -2,8 +2,9 @@
 
 What changed in each release. New entries go under **Unreleased**; releasing renames that heading to the version and date. Each GitHub release shows its version's section.
 
-## Unreleased
+## 1.1.0 - 2026-10-20
 
+- **PullDay for Linux.** Each release now has a `.deb` for Ubuntu 24.04 or newer and Linux Mint 22 or newer (amd64): the same panel, settings and log as on the Mac, in the tray. Install it with `sudo apt install ./PullDay-1.1.0-amd64.deb` (the README has the details).
 - **Show in Finder** on Claude Code, Codex or Antigravity CLI now selects the program in Finder instead of opening it.
 
 ## 1.0.3 - 2026-10-17

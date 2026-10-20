@@ -1,6 +1,6 @@
 # Releasing PullDay
 
-Every release on GitHub has a downloadable `PullDay-<version>.dmg` and notes taken from [CHANGELOG.md](CHANGELOG.md). The [Release workflow](.github/workflows/release.yml) builds and publishes both, so a release is mostly writing the notes and pushing a tag.
+Every release on GitHub has a downloadable `PullDay-<version>.dmg` for macOS, `PullDay-<version>-amd64.deb` for Linux, and notes taken from [CHANGELOG.md](CHANGELOG.md). The [Release workflow](.github/workflows/release.yml) builds and publishes all three, so a release is mostly writing the notes and pushing a tag.
 
 ## Versions
 
@@ -26,12 +26,13 @@ Every change a user would notice gets a line under `## Unreleased` at the top of
    git push origin main v1.0.1
    ```
 3. The Release workflow then:
-   - stops if the tag and `Info.plist` disagree, or if `CHANGELOG.md` on `main` has no section for the version;
+   - stops if the tag disagrees with `Info.plist` or `rust/pullday-linux/Cargo.toml`, or if `CHANGELOG.md` on `main` has no section for the version;
+   - on Ubuntu 24.04, builds `PullDay-<version>-amd64.deb`, checks it, and installs, reinstalls and removes it in a clean `ubuntu:24.04` container. If any of that fails, nothing is published;
    - runs the self-test and builds `PullDay-<version>.dmg`;
-   - publishes the GitHub release with that section as the notes, install steps and the DMG's SHA-256.
-4. Check the release page, download the DMG, and open the app once.
+   - publishes the GitHub release with that section as the notes, install steps and the SHA-256 of the DMG and the `.deb`.
+4. Check the release page, download the DMG and the `.deb`, check their SHA-256 against the notes, and open the app once.
 
-To rebuild the release of an existing tag, for example after fixing its notes on `main`, run the Release workflow from the **Actions** tab and enter the tag. It replaces the DMG and the notes.
+To rebuild the release of an existing tag, for example after fixing its notes on `main`, run the Release workflow from the **Actions** tab and enter the tag. It replaces the DMG, the `.deb` and the notes. Tags from before the Linux app (v1.0.3 and older) have no `.deb`, so their rebuild replaces the DMG and the notes only.
 
 ## Signing
 

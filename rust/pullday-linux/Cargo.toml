@@ -1,6 +1,6 @@
 [package]
 name = "pullday-linux"
-version = "1.0.3" # equal to Info.plist's CFBundleShortVersionString; tauri.conf.json has none, so Tauri uses this
+version = "1.1.0" # equal to Info.plist's CFBundleShortVersionString; tauri.conf.json has none, so Tauri uses this
 edition = "2021"
 rust-version = "1.90" # tauri 2.12.4's own
 license = "MIT"

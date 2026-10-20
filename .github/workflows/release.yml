@@ -1,7 +1,8 @@
 name: Release
 
-# Pushing a tag vX.Y.Z builds PullDay-X.Y.Z.dmg and publishes the GitHub release, with the notes from
-# CHANGELOG.md's "## X.Y.Z" section on main. Run it by hand to (re)build the release of an existing tag.
+# Pushing a tag vX.Y.Z builds PullDay-X.Y.Z.dmg and PullDay-X.Y.Z-amd64.deb and publishes the GitHub release, with
+# the notes from CHANGELOG.md's "## X.Y.Z" section on main. Run it by hand to (re)build the release of an existing tag.
+# Tags from before the Linux app (no rust/pullday-linux/package-deb.sh) get the DMG alone.
 on:
   push:
     tags: ["v*"]
@@ -11,12 +12,81 @@ on:
         description: "Existing tag to build the release for, e.g. v1.0.0"
         required: true
 
+# Read-only by default: the deb job builds third-party crates and pulls a Docker image.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  # The Linux package. If it fails, the release job never runs and nothing is published.
+  deb:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      built: ${{ steps.has.outputs.built }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Does this tag have the Linux app?
+        id: has
+        run: |
+          if [ -f rust/pullday-linux/package-deb.sh ]; then built=true; else built=false; fi
+          echo "built=$built" >> "$GITHUB_OUTPUT"
+
+      - name: Check the version
+        if: steps.has.outputs.built == 'true'
+        run: |
+          VERSION="${TAG#v}"
+          CARGO="$(sed -n 's/^version = "\([^"]*\)".*/\1/p' rust/pullday-linux/Cargo.toml | head -n 1)"
+          if [ "$CARGO" != "$VERSION" ]; then
+            echo "::error::Tag $TAG, but rust/pullday-linux/Cargo.toml says $CARGO"
+            exit 1
+          fi
+
+      - name: System libraries
+        if: steps.has.outputs.built == 'true'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev desktop-file-utils
+
+      - name: Rust toolchain
+        if: steps.has.outputs.built == 'true'
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - name: Package (.deb)
+        if: steps.has.outputs.built == 'true'
+        run: rust/pullday-linux/package-deb.sh "$RUNNER_TEMP"
+
+      - name: Check the package
+        if: steps.has.outputs.built == 'true'
+        run: rust/pullday-linux/check-deb.sh "$RUNNER_TEMP"/PullDay-*-amd64.deb
+
+      # On a clean 24.04, Depends only: every linked library resolves and loads, and reinstall and remove work.
+      - name: Install smoke test (ubuntu:24.04)
+        if: steps.has.outputs.built == 'true'
+        run: |
+          docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$RUNNER_TEMP:/w" ubuntu:24.04 sh -ec '
+            apt-get update
+            deb=$(ls /w/PullDay-*-amd64.deb)
+            v=${deb#/w/PullDay-}; v=${v%-amd64.deb}
+            apt-get install -y --no-install-recommends "$deb"
+            test "$(pullday --version)" = "PullDay $v"
+            apt-get install -y --no-install-recommends --reinstall "$deb"
+            apt-get remove -y pullday
+            test ! -e /usr/bin/pullday'
+
+      - uses: actions/upload-artifact@v7
+        if: steps.has.outputs.built == 'true'
+        with:
+          name: deb
+          path: ${{ runner.temp }}/PullDay-*-amd64.deb
+          if-no-files-found: error
+
   release:
+    needs: deb
     runs-on: macos-15
+    permissions:
+      contents: write
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -53,7 +123,7 @@ jobs:
         run: |
           ./build.sh --dmg
           mv build/PullDay.dmg "PullDay-$VERSION.dmg"
-          SHA="$(shasum -a 256 "PullDay-$VERSION.dmg" | cut -d' ' -f1)"
+          SHA="$(shasum -a 256 "PullDay-$VERSION.dmg" | cut -d' ' -f1)"; [ -n "$SHA" ]
           cat >> notes.md <<EOF
 
           ## Install
@@ -63,13 +133,33 @@ jobs:
           SHA-256: \`$SHA\`
           EOF
 
+      - uses: actions/download-artifact@v8
+        if: needs.deb.outputs.built == 'true'
+        with:
+          name: deb
+
+      - name: Linux notes
+        if: needs.deb.outputs.built == 'true'
+        run: |
+          DEB="PullDay-$VERSION-amd64.deb"
+          SHA="$(shasum -a 256 "$DEB" | cut -d' ' -f1)"; [ -n "$SHA" ]
+          cat >> notes.md <<EOF
+
+          **Linux** (Ubuntu 24.04 or newer, Linux Mint 22 or newer; amd64): download **$DEB**, run \`sudo apt install ./$DEB\`, then open PullDay from your apps menu. To update, install the new .deb the same way, then quit and reopen PullDay. On GNOME the tray icon needs AppIndicator support (on by default on Ubuntu).
+
+          SHA-256: \`$SHA\`
+          EOF
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          BUILT: ${{ needs.deb.outputs.built }}
         run: |
+          set -- "PullDay-$VERSION.dmg"
+          if [ "$BUILT" = true ]; then set -- "$@" "PullDay-$VERSION-amd64.deb"; fi
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" "PullDay-$VERSION.dmg" --clobber
+            gh release upload "$TAG" "$@" --clobber
             gh release edit "$TAG" --title "PullDay $VERSION" --notes-file notes.md
           else
-            gh release create "$TAG" "PullDay-$VERSION.dmg" --verify-tag --title "PullDay $VERSION" --notes-file notes.md
+            gh release create "$TAG" "$@" --verify-tag --title "PullDay $VERSION" --notes-file notes.md
           fi

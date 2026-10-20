@@ -80,6 +80,18 @@ That compiles a universal app, copies it to `/Applications` and launches it. Eit
 
 </details>
 
+### Linux
+
+PullDay for Linux runs on Ubuntu 24.04 or newer and Linux Mint 22 or newer, on amd64. Get `PullDay-<version>-amd64.deb` from the [latest release](https://github.com/SherifMoShalaby/PullDay/releases/latest) and install it:
+
+```bash
+sudo apt install ./PullDay-<version>-amd64.deb
+```
+
+Then open PullDay from your apps menu and look for its icon in the tray. On GNOME the tray icon needs AppIndicator support, which Ubuntu has on by default. Turn on **Open PullDay at login** in its settings so it keeps running.
+
+To update, install the new `.deb` the same way, then quit and reopen PullDay.
+
 ## Using it
 
 - Click the barbell to see everything PullDay found. A number next to it means updates are waiting.
@@ -130,6 +142,25 @@ rm -f ~/Library/Logs/PullDay.log
 ```
 
 Nothing else was installed. Your skills, plugins and tools stay exactly as they are.
+
+### Linux
+
+1. Choose **Quit** in PullDay's menu, then remove the package:
+
+   ```bash
+   sudo apt remove pullday
+   ```
+
+2. PullDay set up a few files in your home folder: a timer for scheduled checks and, if you turned it on, the login entry. They do nothing once the app is gone, but to remove them:
+
+   ```bash
+   systemctl --user disable --now pullday-check.timer
+   rm -f ~/.config/systemd/user/pullday-check.service ~/.config/systemd/user/pullday-check.timer ~/.config/autostart/pullday.desktop
+   ```
+
+   If you removed the package while PullDay was still running, the timer logs a `status=203/EXEC` failure every 15 minutes until you log out or run these commands.
+
+3. Optionally, remove its settings, log and web view data: `rm -rf ~/.config/pullday ~/.local/state/pullday ~/.local/share/dev.pullday.app`.
 
 ## Contributing
 
