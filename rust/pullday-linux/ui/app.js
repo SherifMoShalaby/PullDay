@@ -7,7 +7,7 @@
  * @typedef {{id: string, title: string, rows: Row[]}} Group
  * @typedef {{id: string, title: string, pending: string[], groups: Group[]}} Section
  * @typedef {{phase: string, lastRun: number | null, updateAllIds: string[], sections: Section[],
- *   trayNote: string | null}} Snapshot
+ *   trayNote: string | null, appUpdate: string | null}} Snapshot
  */
 
 /** Row trailing → icon, color and tooltip, as ItemRow's `trailing`. */
@@ -51,6 +51,9 @@ function render() {
   $("banner").hidden = count === 0;
   $("banner-text").textContent = `${count} update${count === 1 ? "" : "s"} available`;
   /** @type {HTMLButtonElement} */ ($("update-all")).disabled = busy();
+
+  $("app-update").hidden = !snap.appUpdate;
+  $("app-update-text").textContent = `PullDay ${snap.appUpdate || ""} is available`;
 
   const list = $("list");
   const scroll = list.scrollTop;
@@ -186,6 +189,7 @@ document.addEventListener("keydown", (e) => {
 
 $("refresh").onclick = () => invoke("check_now");
 $("update-all").onclick = () => invoke("update_all");
+$("download").onclick = () => invoke("open_release");
 $("settings").onclick = () => invoke("show_window", { name: "settings" });
 $("log").onclick = () => invoke("show_window", { name: "log" });
 $("quit").onclick = () => invoke("quit");

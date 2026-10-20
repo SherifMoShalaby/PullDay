@@ -1,6 +1,5 @@
 {
   "productName": "PullDay",
-  "version": "0.1.0",
   "identifier": "dev.pullday.app",
   "build": { "frontendDist": "ui" },
   "app": {

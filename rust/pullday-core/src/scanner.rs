@@ -796,17 +796,7 @@ pub fn github_release_tag(
     allow_pre: bool,
     api: &str,
 ) -> Option<String> {
-    let fetch = |path: &str| -> Option<Value> {
-        let url = quote(&format!("{api}/repos/{owner}/{repo}/{path}"));
-        let result = run(
-            &format!("curl -fsS --max-time 20 -H 'Accept: application/vnd.github+json' {url}"),
-            30,
-        );
-        result
-            .ok()
-            .then(|| serde_json::from_str(&result.output).ok())
-            .flatten()
-    };
+    let fetch = |path: &str| github_json(owner, repo, path, api);
     let tag = |v: &Value| v.get("tag_name")?.as_str().map(String::from);
     if let Some(git_ref) = git_ref {
         return fetch(&format!("releases/tags/{git_ref}"))
@@ -819,6 +809,25 @@ pub fn github_release_tag(
         }
     }
     fetch("releases?per_page=1")?.get(0).and_then(tag)
+}
+
+/// The newest full release, for PullDay's own notice: `releases/latest` only, which never returns a draft or a
+/// pre-release, so (unlike `github_release_tag`) no fallback to the release list.
+pub fn latest_release_tag(owner: &str, repo: &str, api: &str) -> Option<String> {
+    let latest = github_json(owner, repo, "releases/latest", api)?;
+    latest.get("tag_name")?.as_str().map(String::from)
+}
+
+fn github_json(owner: &str, repo: &str, path: &str, api: &str) -> Option<Value> {
+    let url = quote(&format!("{api}/repos/{owner}/{repo}/{path}"));
+    let result = run(
+        &format!("curl -fsS --max-time 20 -H 'Accept: application/vnd.github+json' {url}"),
+        30,
+    );
+    result
+        .ok()
+        .then(|| serde_json::from_str(&result.output).ok())
+        .flatten()
 }
 
 pub fn discover_antigravity_plugins() -> Vec<UpdatableItem> {
@@ -1363,6 +1372,25 @@ mod tests {
                 && result.summary.contains("won't pass the name --all")
                 && !result.output.contains("$ ")
         );
+    }
+
+    #[test]
+    fn the_latest_release_is_read_from_releases_latest_only() {
+        let t = Tmp::new("latest");
+        let api = |dir: &str| format!("file://{}", t.p(dir));
+        t.write("full/repos/o/r/releases/latest", r#"{"tag_name":"v1.0.3"}"#);
+        assert_eq!(
+            latest_release_tag("o", "r", &api("full")),
+            Some("v1.0.3".into())
+        );
+        // Only a release list, newest first, here a pre-release: the Gemini lookup falls back to it, this one doesn't.
+        t.write("pre/repos/o/r/releases", r#"[{"tag_name":"v2.0.0-beta"}]"#);
+        assert_eq!(
+            github_release_tag("o", "r", None, false, &api("pre")),
+            Some("v2.0.0-beta".into())
+        );
+        assert_eq!(latest_release_tag("o", "r", &api("pre")), None);
+        assert_eq!(latest_release_tag("o", "r", &api("none")), None);
     }
 
     #[test]

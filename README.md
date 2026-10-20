@@ -102,6 +102,7 @@ After a plugin or extension updates, restart that agent's open sessions to load 
 PullDay runs commands on your machine, so here is exactly what it does unasked:
 
 - **Checks**, on the schedule you pick and when a skills folder changes. They only read: `git fetch`, `git ls-remote`, `uv tool list --outdated`, `pipx runpip … list --outdated`, `npm outdated -g`, and version lookups on formulae.brew.sh, registry.npmjs.org and the GitHub API.
+- **The Linux app** also checks GitHub Releases for a newer PullDay at launch and once a day. It only shows a notice in the panel, plus a notification if notifications are on; you download and install the new version yourself.
 - **Updates** happen only when you click, unless you turn on **Install updates automatically**. It's off by default.
 - A git repo that a skills folder only links to, such as one of your own projects, is never updated on schedule, only when you click.
 - Git never runs a repository's hooks and never follows `file://` remotes. Nothing ever answers a password or consent prompt for you: a private repo that needs credentials shows an error, and a Gemini extension update that needs your consent asks you to run it in a terminal.

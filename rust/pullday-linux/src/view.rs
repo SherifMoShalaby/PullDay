@@ -2,9 +2,10 @@
 
 use pullday_core::models::{Agent, ItemStatus, SourceKind, UpdatableItem};
 use pullday_core::prefs::Prefs;
-use pullday_core::state::{groups, pending, updates_available, visible, LogEntry};
+use pullday_core::state::{groups, pending, updates_available, visible, LogEntry, Notice};
+use pullday_core::tools::is_newer;
 use serde_json::{json, Value};
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, UNIX_EPOCH};
 
 /// One tray menu entry: id, label, enabled.
 pub type MenuEntry = (&'static str, String, bool);
@@ -159,8 +160,87 @@ pub fn row(item: &UpdatableItem) -> Value {
     })
 }
 
+/// The release's version when tag `v1.1.0` (or `1.1.0`) is newer than `current`; a pre-release or junk tag never is.
+pub fn newer_release(tag: &str, current: &str) -> Option<String> {
+    let version = tag.strip_prefix('v').unwrap_or(tag);
+    is_newer(version, current).then(|| version.to_string())
+}
+
+/// When to look for a new release again: in a day after an answer, in an hour after a failed lookup (offline, rate
+/// limited).
+pub fn next_release_check(answered: bool) -> Duration {
+    Duration::from_secs(if answered { 24 * 3600 } else { 3600 })
+}
+
+/// The new-version notice for the latest release's tag: what the panel shows, and a notification once per version
+/// (when notifications are on and it isn't the version last notified).
+pub fn release_notice(
+    tag: Option<&str>,
+    current: &str,
+    notified: Option<&str>,
+    notify_on: bool,
+) -> (Option<String>, Option<Notice>) {
+    let update = tag.and_then(|t| newer_release(t, current));
+    let notice = update
+        .as_ref()
+        .filter(|v| notify_on && notified != Some(v.as_str()))
+        .map(|v| Notice {
+            title: format!("PullDay {v} is available"),
+            body: "Download it from GitHub Releases, then quit and reopen PullDay.".into(),
+        });
+    (update, notice)
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn only_a_newer_plain_release_counts() {
+        assert_eq!(newer_release("v1.1.0", "1.0.3"), Some("1.1.0".into()));
+        assert_eq!(newer_release("1.1.0", "1.0.3"), Some("1.1.0".into()));
+        for tag in ["v1.0.3", "v1.0.2", "v1.1.0-beta", "", "latest"] {
+            assert_eq!(newer_release(tag, "1.0.3"), None, "{tag}");
+        }
+    }
+
+    #[test]
+    fn a_failed_release_lookup_is_retried_within_the_hour() {
+        assert_eq!(next_release_check(true), Duration::from_secs(86400));
+        assert_eq!(next_release_check(false), Duration::from_secs(3600));
+    }
+
+    #[test]
+    fn a_new_release_is_notified_once_per_version() {
+        let notice = |v: &str| Notice {
+            title: format!("PullDay {v} is available"),
+            body: "Download it from GitHub Releases, then quit and reopen PullDay.".into(),
+        };
+        let some = |v: &str| Some(v.to_string());
+        assert_eq!(
+            release_notice(Some("v1.1.0"), "1.0.3", None, true),
+            (some("1.1.0"), Some(notice("1.1.0")))
+        );
+        assert_eq!(
+            release_notice(Some("v1.1.0"), "1.0.3", Some("1.1.0"), true),
+            (some("1.1.0"), None),
+            "already notified"
+        );
+        assert_eq!(
+            release_notice(Some("v1.2.0"), "1.0.3", Some("1.1.0"), true),
+            (some("1.2.0"), Some(notice("1.2.0"))),
+            "a newer one than the notified one"
+        );
+        assert_eq!(
+            release_notice(Some("v1.1.0"), "1.0.3", None, false),
+            (some("1.1.0"), None),
+            "notifications off"
+        );
+        assert_eq!(release_notice(None, "1.0.3", None, true), (None, None));
+        assert_eq!(
+            release_notice(Some("v1.0.3"), "1.0.3", None, true),
+            (None, None)
+        );
+    }
     use super::*;
 
     #[test]

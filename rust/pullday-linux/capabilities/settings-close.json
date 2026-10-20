@@ -1,0 +1,6 @@
+{
+  "identifier": "settings-close",
+  "description": "Settings may finish closing itself after saving a just-typed command",
+  "windows": ["settings"],
+  "permissions": ["core:window:allow-destroy"]
+}

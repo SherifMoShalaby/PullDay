@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: System libraries
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev desktop-file-utils
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal -c clippy && rustup default stable
       - uses: actions/cache@v6
@@ -69,9 +69,25 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             rust/target
-          key: cargo-linux-app-${{ hashFiles('rust/Cargo.lock') }}
-          restore-keys: cargo-linux-app-
+          key: cargo-linux-app-v2-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: cargo-linux-app-v2-
       - name: Lint (warnings are errors)
         run: cargo clippy -p pullday-linux --locked --all-targets -- -D warnings
       - name: Test
         run: cargo test -p pullday-linux --locked
+      - name: Package (.deb)
+        run: pullday-linux/package-deb.sh "$RUNNER_TEMP"
+      - name: Check the package
+        run: pullday-linux/check-deb.sh "$RUNNER_TEMP"/PullDay-*-amd64.deb
+      # On a clean 24.04, Depends only: every linked library resolves and loads, and reinstall and remove work.
+      - name: Install smoke test (ubuntu:24.04)
+        run: |
+          docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$RUNNER_TEMP:/w" ubuntu:24.04 sh -ec '
+            apt-get update
+            deb=$(ls /w/PullDay-*-amd64.deb)
+            v=${deb#/w/PullDay-}; v=${v%-amd64.deb}
+            apt-get install -y --no-install-recommends "$deb"
+            test "$(pullday --version)" = "PullDay $v"
+            apt-get install -y --no-install-recommends --reinstall "$deb"
+            apt-get remove -y pullday
+            test ! -e /usr/bin/pullday'

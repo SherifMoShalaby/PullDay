@@ -6,12 +6,14 @@ mod view;
 mod worker;
 
 use pullday_core::prefs::{default_path, Prefs};
-use pullday_core::scanner::Scanner;
+use pullday_core::scanner::{latest_release_tag, Scanner, GITHUB_API};
 use pullday_core::shell::{child_env, home, log_path, DROP_GDK_BACKEND};
-use pullday_core::state::Core;
+use pullday_core::state::{Core, Notice};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+use std::sync::mpsc::Sender;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -34,10 +36,16 @@ struct Shell {
     anchor: Mutex<Option<PhysicalPosition<f64>>>,
     /// The panel's height in logical pixels, as its page last reported it.
     height: Mutex<f64>,
+    /// Re-place the panel once its new height lands (`place::place_on_configure`).
+    replace: AtomicBool,
+    /// Where the tray icon was last clicked: Open PullDay's anchor under forced XWayland.
+    click: Mutex<Option<PhysicalPosition<f64>>>,
     /// The tray menu's entries, in `view::tray_menu` order.
     menu: Mutex<Vec<MenuItem<Wry>>>,
     /// The Settings tab last shown, so reopening Settings returns to it (the Mac's `settingsTab`).
     settings_tab: Mutex<String>,
+    /// A newer PullDay release's version, from the release check (`start_release_check`).
+    app_update: Mutex<Option<String>>,
 }
 
 impl Default for Shell {
@@ -47,8 +55,11 @@ impl Default for Shell {
             hidden_at: Mutex::default(),
             anchor: Mutex::default(),
             height: Mutex::new(place::PANEL_SIZE.1),
+            replace: AtomicBool::default(),
+            click: Mutex::default(),
             menu: Mutex::default(),
             settings_tab: Mutex::new("general".into()),
+            app_update: Mutex::default(),
         }
     }
 }
@@ -59,6 +70,10 @@ fn main() {
         if let Some(dir) = desktop::runtime_dir(|k| std::env::var_os(k)) {
             desktop::poke_check(&dir);
         }
+        return;
+    }
+    if std::env::args_os().skip(1).any(|a| a == "--version") {
+        println!("PullDay {}", env!("CARGO_PKG_VERSION"));
         return;
     }
     // Before GTK or any thread starts.
@@ -115,6 +130,7 @@ fn main() {
             remember_tab,
             open_item,
             open_log,
+            open_release,
             panel_height,
             hide_panel,
             quit
@@ -144,6 +160,7 @@ fn main() {
                 height: icon.height(),
                 rgba: icon.rgba().to_vec(),
             });
+            start_release_check(app.handle(), notices.clone());
             let worker = Worker::start(core, move |snap| on_snapshot(&handle, snap), notices);
             worker.submit(Job::Startup);
             app.manage(worker);
@@ -187,6 +204,19 @@ fn main() {
                 WindowEvent::Focused(false) if shell.has_tray.load(SeqCst) => {
                     let _ = window.hide();
                     *shell.hidden_at.lock().unwrap() = Some(Instant::now());
+                }
+                WindowEvent::Resized(size)
+                    if place::place_on_configure(
+                        shell.replace.load(SeqCst),
+                        size.height,
+                        *shell.height.lock().unwrap(),
+                        window.scale_factor().unwrap_or(1.0),
+                    ) =>
+                {
+                    shell.replace.store(false, SeqCst);
+                    if let Some(panel) = window.get_webview_window("panel") {
+                        place_panel(window.app_handle(), &panel);
+                    }
                 }
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
@@ -241,6 +271,34 @@ fn start_schedule(app: &AppHandle) {
     });
 }
 
+/// Looks for a newer PullDay release at launch and then daily (hourly after a failure), on its own thread, so a slow or offline lookup never
+/// holds up a check. A failed lookup is silent and keeps the last answer.
+fn start_release_check(app: &AppHandle, notices: Sender<Notice>) {
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        let tag = latest_release_tag("SherifMoShalaby", "PullDay", GITHUB_API);
+        if tag.is_some() {
+            // Its own Prefs: `set` merges one key into the file, so the worker's writes are kept.
+            let mut prefs = Prefs::load(&default_path());
+            let (update, notice) = view::release_notice(
+                tag.as_deref(),
+                env!("CARGO_PKG_VERSION"),
+                prefs.app_update_notified().as_deref(),
+                prefs.notify(),
+            );
+            if let (Some(version), Some(notice)) = (&update, notice) {
+                if let Err(e) = prefs.set_app_update_notified(version) {
+                    desktop::log_failure("Couldn't save the notified release", &e.to_string());
+                }
+                let _ = notices.send(notice);
+            }
+            *app.state::<Shell>().app_update.lock().unwrap() = update;
+            republish(&app);
+        }
+        std::thread::sleep(view::next_release_check(tag.is_some()));
+    });
+}
+
 /// Rescans soon after an entry is added, removed or renamed in a watched folder (the Mac's `watchFolders`).
 fn start_polling(app: &AppHandle) {
     let app = app.clone();
@@ -259,12 +317,18 @@ fn start_polling(app: &AppHandle) {
     });
 }
 
-/// The systemd user timer that pokes this PullDay (`--check`), written for wherever this binary now is.
+/// The systemd user timer that pokes this PullDay (`--check`), and an autostart entry that's on, written for
+/// wherever this binary now is.
 fn install_check_timer() {
     let result = std::env::current_exe()
         .map_err(|e| e.to_string())
         .and_then(|exe| desktop::autostart_program(&exe))
         .and_then(|program| {
+            if let Some(file) = autostart_file() {
+                if let Err(e) = desktop::refresh_autostart(&file, &program) {
+                    desktop::log_failure("Couldn't update the login item", &e.to_string());
+                }
+            }
             let config = default_path()
                 .parent()
                 .and_then(Path::parent)
@@ -296,7 +360,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => show_panel(app, app.cursor_position().ok()),
+            "open" => show_panel(app, menu_anchor(app)),
             "update_all" => {
                 app.state::<Worker>().submit(Job::UpdateAll);
             }
@@ -358,11 +422,13 @@ fn republish(app: &AppHandle) {
 
 /// Adds what the app shell knows and the worker doesn't.
 fn with_note(app: &AppHandle, mut snap: Value) -> Value {
-    snap["trayNote"] = if app.state::<Shell>().has_tray.load(SeqCst) {
+    let shell = app.state::<Shell>();
+    snap["trayNote"] = if shell.has_tray.load(SeqCst) {
         Value::Null
     } else {
         NO_TRAY.into()
     };
+    snap["appUpdate"] = shell.app_update.lock().unwrap().clone().into();
     // Read from the file each time, so removing it by hand shows as off.
     snap["prefs"]["launchAtLogin"] = autostart_file()
         .and_then(|f| std::fs::read_to_string(f).ok())
@@ -515,6 +581,12 @@ fn open_log() {
     xdg_open(&log_path());
 }
 
+/// The new-version notice's Download.
+#[tauri::command]
+fn open_release() {
+    spawn_open(desktop::release_command());
+}
+
 /// The panel page reports its content height; the window follows it.
 #[tauri::command]
 fn panel_height(app: AppHandle, px: f64) {
@@ -527,6 +599,7 @@ fn panel_height(app: AppHandle, px: f64) {
     let _ = panel.set_size(LogicalSize::new(place::PANEL_SIZE.0, height));
     // Without a tray it's a normal window the user may have moved.
     if shell.has_tray.load(SeqCst) && panel.is_visible().unwrap_or(false) {
+        shell.replace.store(true, SeqCst);
         place_panel(&app, &panel);
     }
 }
@@ -545,7 +618,10 @@ fn quit(app: AppHandle) {
 }
 
 fn xdg_open(path: &Path) {
-    let mut c = desktop::open_command(path);
+    spawn_open(desktop::open_command(path));
+}
+
+fn spawn_open(mut c: Command) {
     match child_env(&mut c).spawn() {
         Ok(mut child) => {
             std::thread::spawn(move || child.wait());
@@ -570,6 +646,7 @@ fn set_tray_style(app: &AppHandle, tray: bool) {
 }
 
 fn toggle_panel(app: &AppHandle, at: PhysicalPosition<f64>) {
+    *app.state::<Shell>().click.lock().unwrap() = Some(at);
     let Some(panel) = app.get_webview_window("panel") else {
         return;
     };
@@ -581,6 +658,24 @@ fn toggle_panel(app: &AppHandle, at: PhysicalPosition<f64>) {
     ) {
         show_panel(app, Some(at));
     }
+}
+
+fn menu_anchor(app: &AppHandle) -> Option<PhysicalPosition<f64>> {
+    let xy = |p: PhysicalPosition<f64>| (p.x, p.y);
+    let corner = app.primary_monitor().ok().flatten().map(|m| {
+        let a = m.work_area();
+        (
+            f64::from(a.position.x) + f64::from(a.size.width) - 1.0,
+            f64::from(a.position.y),
+        )
+    });
+    place::menu_anchor(
+        DROP_GDK_BACKEND.load(SeqCst),
+        app.cursor_position().ok().map(xy),
+        app.state::<Shell>().click.lock().unwrap().map(xy),
+        corner,
+    )
+    .map(|(x, y)| PhysicalPosition::new(x, y))
 }
 
 /// Shows the panel at `anchor` (physical pixels), or centered when there's none.

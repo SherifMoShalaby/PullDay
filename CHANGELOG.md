@@ -2,6 +2,10 @@
 
 What changed in each release. New entries go under **Unreleased**; releasing renames that heading to the version and date. Each GitHub release shows its version's section.
 
+## Unreleased
+
+- **Show in Finder** on Claude Code, Codex or Antigravity CLI now selects the program in Finder instead of opening it.
+
 ## 1.0.3 - 2026-10-17
 
 - A uv tool installed from git (or another URL or path) no longer shows the PyPI release as an update it can never install; it's shown as pinned instead.

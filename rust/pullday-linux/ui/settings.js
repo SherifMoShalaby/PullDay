@@ -55,7 +55,7 @@ function shown(key, actual, norm = (v) => v) {
 /** @param {string} cmd @param {Record<string, unknown>} args @param {string} key @param {unknown} value */
 function send(cmd, args, key, value) {
   pending.set(key, value);
-  tauri.core.invoke(cmd, args).catch((/** @type {unknown} */ e) => {
+  return tauri.core.invoke(cmd, args).catch((/** @type {unknown} */ e) => {
     console.error(e);
     pending.delete(key);
     if (last) render(last);
@@ -143,6 +143,11 @@ function renderKinds(kinds) {
 /** @type {Map<string, {row: HTMLElement, ignore: HTMLInputElement, command: HTMLInputElement}>} */
 const itemRows = new Map();
 
+/** Commands typed but not sent yet (their 400 ms timer is running), by item id. @type {Map<string, () => Promise<unknown>>} */
+const unsent = new Map();
+// Tauri holds a close until this resolves, so a command typed just before closing is still saved.
+tauri.window.getCurrentWindow().onCloseRequested(() => Promise.all([...unsent.values()].map((save) => save())));
+
 /** @param {Item} item */
 function itemRow(item) {
   const row = el("div", "item");
@@ -164,18 +169,19 @@ function itemRow(item) {
   command.placeholder = "Post-update command (optional)";
   command.spellcheck = false;
   command.setAttribute("aria-label", `Post-update command for ${item.name}`);
-  // Saved 400 ms after typing stops too, so closing the window after typing keeps the command.
-  // shortcut: a close within those 400 ms loses the last keystrokes (pagehide can't send them); flush on CloseRequested if that bites.
+  // Saved 400 ms after typing stops too, and on close (onCloseRequested above).
   /** @type {number | undefined} */
   let timer;
   const saveCommand = () => {
     clearTimeout(timer);
-    send("set_setting", { key: "postCommand", value: { id: item.id, command: command.value } }, `cmd:${item.id}`, command.value);
+    unsent.delete(item.id);
+    return send("set_setting", { key: "postCommand", value: { id: item.id, command: command.value } }, `cmd:${item.id}`, command.value);
   };
   command.oninput = () => {
     pending.set(`cmd:${item.id}`, command.value);
     clearTimeout(timer);
     timer = setTimeout(saveCommand, 400);
+    unsent.set(item.id, saveCommand);
   };
   command.onchange = saveCommand;
   row.append(head, command);

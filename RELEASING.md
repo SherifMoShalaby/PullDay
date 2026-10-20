@@ -18,6 +18,7 @@ Every change a user would notice gets a line under `## Unreleased` at the top of
 
 1. On `main`, in one commit:
    - set `CFBundleShortVersionString` in `Info.plist` to the new version;
+   - set `version` in `rust/pullday-linux/Cargo.toml` to the same version, and refresh the lock with `cargo update --workspace` in `rust/`;
    - rename `## Unreleased` in `CHANGELOG.md` to `## <version> - <YYYY-MM-DD>`.
 2. Push that commit, then tag it and push the tag:
    ```bash

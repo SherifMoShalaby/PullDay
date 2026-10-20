@@ -8,6 +8,7 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const INTERVAL: &str = "checkInterval";
@@ -19,6 +20,12 @@ const IGNORED: &str = "ignored";
 const SKIPPED: &str = "skippedUpdates";
 const POST_COMMANDS: &str = "postCommands";
 const LAST_RUN: &str = "lastRun";
+/// Linux only: the PullDay release the new-version notification last went out for.
+const APP_UPDATE_NOTIFIED: &str = "appUpdateNotified";
+
+/// One writer at a time in this process (the worker's `Prefs` and the release check's): they share the temp file
+/// name, and an unlocked read-merge-rename can lose a key or fail to rename.
+static WRITE: Mutex<()> = Mutex::new(());
 
 /// The kinds shipped before `knownKinds` existed. Never all kinds: then nothing would ever look new.
 pub const LEGACY_KINDS: [&str; 6] = ["plugin", "gitSkill", "uv", "pipx", "npm", "claudeCode"];
@@ -76,6 +83,9 @@ impl Prefs {
             self.set(KINDS, set_value(&kinds))?;
         }
         let all: BTreeSet<String> = SourceKind::ALL.iter().map(|k| k.id().to_string()).collect();
+        if self.strings(KNOWN_KINDS).as_ref() == Some(&all) {
+            return Ok(()); // already current: loading writes nothing
+        }
         self.set(KNOWN_KINDS, set_value(&all))
     }
 
@@ -134,6 +144,17 @@ impl Prefs {
         UNIX_EPOCH.checked_add(Duration::try_from_secs_f64(seconds).ok()?)
     }
 
+    pub fn app_update_notified(&self) -> Option<String> {
+        self.values
+            .get(APP_UPDATE_NOTIFIED)?
+            .as_str()
+            .map(String::from)
+    }
+
+    pub fn set_app_update_notified(&mut self, version: &str) -> io::Result<()> {
+        self.set(APP_UPDATE_NOTIFIED, version.into())
+    }
+
     pub fn set_check_interval(&mut self, seconds: f64) -> io::Result<()> {
         self.set(INTERVAL, seconds.into())
     }
@@ -172,6 +193,7 @@ impl Prefs {
     /// Merged into the file as it is now, as UserDefaults does per key, so a change another process (the app, or
     /// the scan example) made to another key since this one loaded isn't lost.
     fn set(&mut self, key: &str, value: Value) -> io::Result<()> {
+        let _one_writer = WRITE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(Ok(Value::Object(disk))) = std::fs::read(&self.path)
             .ok()
             .map(|b| serde_json::from_slice(&b))
@@ -364,6 +386,42 @@ mod tests {
         example.set_auto_update(true).unwrap();
         let both = Prefs::load(&t.config());
         assert!(!both.notify() && both.auto_update());
+    }
+
+    #[test]
+    fn the_notified_release_is_merged_with_the_workers_writes() {
+        let t = Tmp::new("notified");
+        let mut worker = Prefs::load(&t.config());
+        let mut notice = Prefs::load(&t.config());
+        assert_eq!(notice.app_update_notified(), None);
+        worker.set_auto_update(true).unwrap();
+        notice.set_app_update_notified("1.0.3").unwrap();
+        worker.set_notify(false).unwrap();
+        let all = Prefs::load(&t.config());
+        assert!(all.auto_update() && !all.notify());
+        assert_eq!(all.app_update_notified().as_deref(), Some("1.0.3"));
+    }
+
+    #[test]
+    fn two_writers_in_one_process_lose_nothing() {
+        let t = Tmp::new("writers");
+        let writer = |prefix: &'static str| {
+            let path = t.config();
+            std::thread::spawn(move || {
+                let mut p = Prefs::load(&path);
+                (0..300).try_for_each(|i| p.set(&format!("{prefix}{i}"), i.into()))
+            })
+        };
+        let (a, b) = (writer("a"), writer("b"));
+        a.join().unwrap().unwrap();
+        b.join().unwrap().unwrap();
+        let all = Prefs::load(&t.config());
+        let missing: Vec<String> = ["a", "b"]
+            .iter()
+            .flat_map(|p| (0..300).map(move |i| format!("{p}{i}")))
+            .filter(|k| !all.values.contains_key(k))
+            .collect();
+        assert!(missing.is_empty(), "lost {missing:?}");
     }
 
     #[test]

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PullDay
+Comment=Keeps your AI coding agents' skills, plugins and extensions up to date
+Exec=pullday
+Icon=pullday
+Terminal=false
+Categories=Utility;
+StartupWMClass=Pullday

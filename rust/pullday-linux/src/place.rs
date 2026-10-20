@@ -48,6 +48,27 @@ pub fn panel_origin(
     (x, y.min(wy + wh - h).max(wy))
 }
 
+/// Muffin applies a move before the resize asked for with it and keeps the still-taller panel on screen by pushing it
+/// up, so a pending re-place runs when a configure first reports the height asked for (once: every move configures).
+pub fn place_on_configure(pending: bool, reported: u32, height: f64, scale: f64) -> bool {
+    pending && (f64::from(reported) - height * scale).abs() < 1.0
+}
+
+/// Open PullDay's anchor. Under forced XWayland the pointer is XWayland's last one, stale while it was over the
+/// compositor's own menu: then the last tray click, else the work area's top-right (GNOME's tray). X11 keeps the pointer.
+pub fn menu_anchor(
+    forced_x11: bool,
+    pointer: Option<(f64, f64)>,
+    click: Option<(f64, f64)>,
+    top_right: Option<(f64, f64)>,
+) -> Option<(f64, f64)> {
+    if forced_x11 {
+        click.or(top_right)
+    } else {
+        pointer
+    }
+}
+
 /// Clicking the tray icon while the panel is open first hides it (focus loss), then delivers the click:
 /// that click must not reopen it.
 pub fn ignore_activate(hidden_at: Option<Instant>, now: Instant) -> bool {
@@ -162,6 +183,26 @@ mod tests {
     fn no_anchor_centers_in_the_work_area() {
         let work = (1920.0, 32.0, 1920.0, 1048.0);
         assert_eq!(panel_origin(None, PANEL_SIZE, 1.0, work), (2690.0, 316.0));
+    }
+
+    #[test]
+    fn re_placed_once_when_the_asked_height_lands() {
+        assert!(place_on_configure(true, 237, 237.0, 1.0));
+        assert!(!place_on_configure(true, 480, 237.0, 1.0)); // the resize hasn't landed yet
+        assert!(!place_on_configure(false, 237, 237.0, 1.0)); // already re-placed: the move configures too
+        assert!(place_on_configure(true, 474, 237.0, 2.0));
+    }
+
+    #[test]
+    fn open_pullday_anchor() {
+        let (pointer, click, corner) = (
+            Some((640.0, 400.0)),
+            Some((1100.0, 16.0)),
+            Some((1279.0, 32.0)),
+        );
+        assert_eq!(menu_anchor(false, pointer, click, corner), pointer);
+        assert_eq!(menu_anchor(true, pointer, click, corner), click);
+        assert_eq!(menu_anchor(true, pointer, None, corner), corner);
     }
 
     #[test]

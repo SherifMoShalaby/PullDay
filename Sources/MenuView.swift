@@ -294,7 +294,15 @@ struct ItemRow: View {
             Button("Stop Skipping") { state.stopSkipping(item.id) }
         }
         if let path = item.path {
-            Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+            Button("Show in Finder") {
+                let url = URL(fileURLWithPath: path)
+                // A CLI item's path is the program itself: select it in Finder instead of opening (running) it.
+                if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                    NSWorkspace.shared.open(url)
+                } else {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            }
         }
         Button("Post-Update Command…") { WindowManager.shared.showSettings(tab: .items) }
         Button("Show Log") { WindowManager.shared.showLog() }

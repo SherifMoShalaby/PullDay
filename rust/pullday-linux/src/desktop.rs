@@ -117,7 +117,12 @@ pub fn desktop_exec(program: &Path) -> String {
         }
     }
     quoted.push('"');
-    quoted
+    desktop_string(&quoted)
+}
+
+/// A Desktop Entry string value: `\` escaped and no raw line breaks or tabs (spec, "Possible value types").
+pub fn desktop_string(value: &str) -> String {
+    value
         .replace('\\', "\\\\")
         .replace('\n', "\\n")
         .replace('\t', "\\t")
@@ -125,12 +130,61 @@ pub fn desktop_exec(program: &Path) -> String {
 }
 
 /// The XDG autostart entry that starts `program` at login. The delay gives a tray host started in the same
-/// session phase (Mint's xapp-sn-watcher) time to appear first.
+/// session phase (Mint's xapp-sn-watcher) time to appear first. `TryExec` makes the session skip the entry once
+/// the program is gone (after `apt remove`).
 pub fn autostart_entry(program: &Path) -> String {
     format!(
-        "[Desktop Entry]\nType=Application\nName=PullDay\nComment=Keeps your AI coding agents' skills, plugins and extensions up to date\nExec={}\nTerminal=false\nX-GNOME-Autostart-Delay=5\n",
+        "[Desktop Entry]\nType=Application\nName=PullDay\nComment=Keeps your AI coding agents' skills, plugins and extensions up to date\nTryExec={}\nExec={}\nTerminal=false\nX-GNOME-Autostart-Delay=5\n",
+        desktop_string(&program.to_string_lossy()),
         desktop_exec(program)
     )
+}
+
+/// At launch: an entry that's on gets its `Exec=` and `TryExec=` lines pointed at this binary (another build's path,
+/// or an older text without `TryExec`); the user's other lines (`NotShowIn=`, a changed delay) stay. An off or
+/// missing entry is never touched. True when it wrote.
+pub fn refresh_autostart(file: &Path, program: &Path) -> io::Result<bool> {
+    match fs::read_to_string(file) {
+        Ok(entry) if autostart_on(&entry) => {
+            write_if_changed(file, &repoint_entry(&entry, program))
+        }
+        _ => Ok(false),
+    }
+}
+
+/// `entry` with its `Exec=` and `TryExec=` lines for `program` (`TryExec=` goes just
+/// before `Exec=` when missing). An entry with no `Exec=` line gets the whole `autostart_entry`.
+fn repoint_entry(entry: &str, program: &Path) -> String {
+    let fresh = autostart_entry(program);
+    let line_for = |key: &str| {
+        fresh
+            .lines()
+            .find(|l| l.starts_with(key))
+            .unwrap_or_default()
+    };
+    let key = |line: &str| line.split_once('=').map(|(k, _)| k.trim().to_string());
+    let has_try = entry.lines().any(|l| key(l).as_deref() == Some("TryExec"));
+    let (mut out, mut has_exec) = (String::new(), false);
+    for line in entry.lines() {
+        match key(line).as_deref() {
+            Some("Exec") => {
+                if !has_try {
+                    out.push_str(line_for("TryExec="));
+                    out.push('\n');
+                }
+                out.push_str(line_for("Exec="));
+                has_exec = true;
+            }
+            Some("TryExec") => out.push_str(line_for("TryExec=")),
+            _ => out.push_str(line),
+        }
+        out.push('\n');
+    }
+    if has_exec {
+        out
+    } else {
+        fresh
+    }
 }
 
 /// `$XDG_CONFIG_HOME/autostart/pullday.desktop`; `config` is the config folder (`~/.config`).
@@ -182,6 +236,14 @@ pub fn open_command(path: &Path) -> Command {
     let mut c = Command::new("xdg-open");
     c.arg(path).stdin(Stdio::null());
     c
+}
+
+/// Where the new-version notice's Download goes. A constant: never a URL from the network or the page.
+pub const RELEASES_URL: &str = "https://github.com/SherifMoShalaby/PullDay/releases/latest";
+
+/// The notice's Download: `xdg-open` on the releases page.
+pub fn release_command() -> Command {
+    open_command(Path::new(RELEASES_URL))
 }
 
 /// `pullday --check`, run by the systemd timer: asks a running PullDay to check if a check is due. One connect, and
@@ -397,7 +459,11 @@ fn notify(conn: &zbus::blocking::Connection, icon: &Icon, notice: &Notice) -> zb
         4i32,
         icon.rgba.clone(),
     );
-    let hints = std::collections::HashMap::from([("image-data", Value::Structure(image.into()))]);
+    // `desktop-entry` ties the notification to the installed pullday.desktop (GNOME's list shows its name and icon).
+    let hints = std::collections::HashMap::from([
+        ("image-data", Value::Structure(image.into())),
+        ("desktop-entry", Value::from("pullday")),
+    ]);
     conn.call_method(
         Some("org.freedesktop.Notifications"),
         "/org/freedesktop/Notifications",
@@ -580,6 +646,7 @@ mod tests {
         for line in [
             "Type=Application",
             "Name=PullDay",
+            "TryExec=/opt/Pull Day/pullday",
             r#"Exec="/opt/Pull Day/pullday""#,
             "Terminal=false",
             "X-GNOME-Autostart-Delay=5",
@@ -599,11 +666,90 @@ mod tests {
     }
 
     #[test]
+    fn try_exec_is_a_plain_string_value() {
+        let entry = autostart_entry(Path::new(r"/x\y/a$b%c"));
+        assert!(entry.contains("TryExec=/x\\\\y/a$b%c\n"), "{entry}");
+    }
+
+    #[test]
+    fn an_on_autostart_entry_follows_the_binary() {
+        let dir = temp_dir("autostart-refresh");
+        let file = autostart_file(&dir);
+        let program = Path::new("/usr/bin/pullday");
+        assert!(!refresh_autostart(&file, program).unwrap());
+        assert!(!file.exists(), "a missing entry stays missing");
+
+        set_autostart(
+            &file,
+            Some(Path::new("/home/a/pullday-src/target/debug/pullday")),
+        )
+        .unwrap();
+        assert!(refresh_autostart(&file, program).unwrap());
+        assert_eq!(fs::read_to_string(&file).unwrap(), autostart_entry(program));
+        assert!(!refresh_autostart(&file, program).unwrap(), "up to date");
+
+        // An older text for the same path (no TryExec) is rewritten too.
+        let old = autostart_entry(program).replace("TryExec=/usr/bin/pullday\n", "");
+        fs::write(&file, &old).unwrap();
+        assert!(refresh_autostart(&file, program).unwrap());
+        assert_eq!(fs::read_to_string(&file).unwrap(), autostart_entry(program));
+
+        for off in ["Hidden=true", "X-GNOME-Autostart-enabled=false"] {
+            let entry = format!("{}{off}\n", autostart_entry(Path::new("/old/pullday")));
+            fs::write(&file, &entry).unwrap();
+            assert!(!refresh_autostart(&file, program).unwrap());
+            assert_eq!(
+                fs::read_to_string(&file).unwrap(),
+                entry,
+                "an off entry is untouched"
+            );
+        }
+        // The user's own lines stay; only Exec= and TryExec= move.
+        let edited = format!(
+            "{}NotShowIn=XFCE;\n",
+            autostart_entry(Path::new("/old/pullday")).replace("Delay=5", "Delay=30")
+        );
+        fs::write(&file, &edited).unwrap();
+        assert!(refresh_autostart(&file, program).unwrap());
+        let text = fs::read_to_string(&file).unwrap();
+        assert_eq!(
+            text,
+            edited.replace("/old/pullday", "/usr/bin/pullday"),
+            "{text}"
+        );
+        assert!(
+            !refresh_autostart(&file, program).unwrap(),
+            "then up to date"
+        );
+        fs::write(&file, "[Desktop Entry]\nType=Application\n").unwrap();
+        assert!(refresh_autostart(&file, program).unwrap());
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            autostart_entry(program),
+            "no Exec=: the whole entry"
+        );
+        let names: Vec<_> = fs::read_dir(dir.join("autostart")).unwrap().collect();
+        assert_eq!(names.len(), 1, "no temp file left");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn files_open_with_xdg_open_and_no_shell() {
         let c = open_command(Path::new("/home/a b/PullDay; rm -rf ~.log"));
         assert_eq!(c.get_program(), "xdg-open");
         let args: Vec<_> = c.get_args().collect();
         assert_eq!(args, ["/home/a b/PullDay; rm -rf ~.log"]);
+    }
+
+    #[test]
+    fn download_opens_the_releases_page_and_nothing_else() {
+        let c = release_command();
+        assert_eq!(c.get_program(), "xdg-open");
+        let args: Vec<_> = c.get_args().collect();
+        assert_eq!(
+            args,
+            ["https://github.com/SherifMoShalaby/PullDay/releases/latest"]
+        );
     }
 
     #[test]
